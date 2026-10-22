@@ -1,39 +1,39 @@
-import{ withAuth } from "next-auth/middleware";
+import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+
 export default withAuth(
-    function middleware() {
-        return NextResponse.next()
+  function middleware() {
+    return NextResponse.next();
+  },
+  {
+    secret:
+      process.env.NEXTAUTH_SECRET ||
+      "default_development_secret_streamflix_super_secure_key",
+    callbacks: {
+      authorized({ req, token }) {
+        const { pathname } = req.nextUrl;
+        if (
+          pathname === "/" ||
+          pathname.startsWith("/api/auth") ||
+          pathname.startsWith("/api/imagekit-auth") ||
+          pathname.startsWith("/api/video") ||
+          pathname.startsWith("/api/test-db") ||
+          pathname === "/login" ||
+          pathname === "/register"
+        ) {
+          return true;
+        }
+        return !!token;
+      },
     },
-    { callbacks: {
-   authorized({ req , token }) {
-  const {pathname} = req.nextUrl
-  if(
-    pathname.startsWith("/api/auth") ||
-    pathname === "/login " ||
-    pathname === "/register" 
-  
-  )
-  return true 
-  if(pathname === "/" || pathname.startsWith("/api/videos ")) {
-    return true
-  } 
-  return  !!token ;
-   },
- },
-}
-    );
-
-
+  }
+);
 
 export const config = {
-matcher : [
+  matcher: [
     /*
-        * Match all request paths except for the ones starting with:
-    *-_next/static (static files)
-    *-_next/image (image optimization files)
-    *- favicon.ico (favicon file)
-    *-public folder
-    */
+     * Match all request paths except for static files:
+     */
     "/((?!_next/static|_next/image|favicon.ico|public).*)",
-],
+  ],
 };

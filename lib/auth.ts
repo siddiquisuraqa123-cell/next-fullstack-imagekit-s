@@ -1,8 +1,6 @@
-import { error } from "console";
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { connectToDatabase } from "./db";
-import Email from "next-auth/providers/email";
 import bcrypt from "bcryptjs";
 import User from "@/model/user";
 
@@ -78,5 +76,5 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt" ,
   maxAge : 30 * 24 * 60 * 60,
   },
-  secret : process.env.NEXTAUTH_SECRET
+  secret: process.env.NEXTAUTH_SECRET || "default_development_secret_streamflix_super_secure_key"
 };
