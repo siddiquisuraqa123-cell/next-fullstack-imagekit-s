@@ -13,6 +13,10 @@ export interface FeaturedMovie {
   duration?: string;
   tags?: string[];
   isOriginal?: boolean;
+  type?: "movie" | "series";
+  seasons?: string;
+  genre?: string;
+  releaseYear?: string;
 }
 
 interface HeroBannerProps {
@@ -72,8 +76,10 @@ export default function HeroBanner({ movie, onPlay, onMoreInfo }: HeroBannerProp
       <div className="absolute bottom-[10%] sm:bottom-[16%] md:bottom-[22%] left-4 right-4 sm:right-auto md:left-12 max-w-2xl z-20 space-y-2.5 sm:space-y-3 md:space-y-4">
         {/* Netflix Series / Original Badge */}
         <div className="flex items-center gap-2 text-xs md:text-sm font-black tracking-widest uppercase">
-          <span className="bg-[#E50914] text-white px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider shadow">
-            FILM
+          <span className={`text-white px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider shadow ${
+            movie.type === "series" ? "bg-amber-600" : "bg-[#E50914]"
+          }`}>
+            {movie.type === "series" ? "SERIES" : "FILM"}
           </span>
           <span className="text-zinc-300 font-bold tracking-widest text-[10px] sm:text-[11px] md:text-xs">
             {movie.isOriginal ? "STREAMFLIX ORIGINAL" : "STREAMFLIX EXCLUSIVE"}
@@ -90,10 +96,19 @@ export default function HeroBanner({ movie, onPlay, onMoreInfo }: HeroBannerProp
           <span className="text-emerald-400 font-bold">
             {movie.matchScore ?? 98}% Match
           </span>
+          {movie.releaseYear && (
+            <span className="text-zinc-300 text-xs">{movie.releaseYear}</span>
+          )}
           <span className="text-zinc-400 border border-zinc-600 px-1.5 py-0.5 text-[10px] sm:text-[11px] rounded">
             {movie.rating ?? "16+"}
           </span>
-          <span className="text-zinc-300 text-xs">{movie.duration ?? "1h 52m"}</span>
+          {movie.type === "series" && movie.seasons ? (
+            <span className="text-amber-400 font-medium text-xs border border-amber-500/40 px-1.5 py-0.5 rounded bg-amber-500/10">
+              {movie.seasons}
+            </span>
+          ) : (
+            <span className="text-zinc-300 text-xs">{movie.duration ?? "1h 52m"}</span>
+          )}
           <span className="border border-zinc-500/70 text-zinc-300 text-[10px] font-bold px-1.5 py-0.5 rounded">
             Ultra HD
           </span>

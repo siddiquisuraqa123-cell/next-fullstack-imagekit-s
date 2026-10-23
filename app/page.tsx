@@ -10,130 +10,11 @@ import Footer from "./components/Footer";
 import MobileBottomNav from "./components/MobileBottomNav";
 import { apiClient } from "@/lib/api-client";
 import { IVideo } from "@/model/video";
-
-// Curated Cinematic Default Catalog with high-res thumbnails and open trailers
-const CURATED_CATALOG: FeaturedMovie[] = [
-  {
-    id: "curated-1",
-    title: "Cosmos Laundromat",
-    description:
-      "On a desolate island, a suicidal sheep named Franck meets a quirky salesman who offers him the gift of a lifetime: a magical journey through parallel realities and cosmic wonders.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 99,
-    rating: "18+",
-    duration: "2h 12m",
-    tags: ["Mind-Bending", "Sci-Fi", "Surreal", "Visually Striking"],
-    isOriginal: true,
-  },
-  {
-    id: "curated-2",
-    title: "Tears of Steel: Resurgence",
-    description:
-      "Set in a dystopian future where humanity battles towering mechanized forces, a group of rebel technicians and soldiers embark on an audacious experiment to rewrite time.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 97,
-    rating: "16+",
-    duration: "1h 56m",
-    tags: ["Cyberpunk", "Action", "Dystopian", "Sci-Fi"],
-    isOriginal: true,
-  },
-  {
-    id: "curated-3",
-    title: "Sub-Zero Horizon",
-    description:
-      "Trapped aboard an abandoned orbital research outpost, an astrophysics engineer discovers deep-space telemetry signals broadcasting from within the Earth's core.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 95,
-    rating: "16+",
-    duration: "2h 05m",
-    tags: ["Deep Space", "Suspenseful", "Thriller"],
-    isOriginal: false,
-  },
-  {
-    id: "curated-4",
-    title: "The Neon Syndicate",
-    description:
-      "Underneath the neon towers of Neo-Shinjuku, an underground data-smuggler uncovers a conspiracy to monopolize the consciousness of millions through biometric networks.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 98,
-    rating: "18+",
-    duration: "1h 48m",
-    tags: ["Neo-Noir", "Crime", "Action", "Gritty"],
-    isOriginal: true,
-  },
-  {
-    id: "curated-5",
-    title: "Chronicles of Sintel",
-    description:
-      "A fierce lone wanderer treks across treacherous frozen peaks and sun-bleached canyons in relentless search of a stolen dragon companion that holds the secret of her lost ancestry.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 94,
-    rating: "13+",
-    duration: "1h 42m",
-    tags: ["Epic Fantasy", "Adventure", "Emotional"],
-    isOriginal: false,
-  },
-  {
-    id: "curated-6",
-    title: "Velocity Protocol",
-    description:
-      "A prototype hover-craft racer is recruited into a clandestine military infiltration league where high-speed maneuvers are the only weapon against rogue surveillance drones.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1511875762315-c773eb98eec0?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 96,
-    rating: "16+",
-    duration: "2h 14m",
-    tags: ["High Octane", "Racing", "Adrenaline"],
-    isOriginal: true,
-  },
-  {
-    id: "curated-7",
-    title: "Shadows of the Abyss",
-    description:
-      "Marine biologists descending into the Puerto Rico Trench lose communication with their surface vessel when bioluminescent leviathans awaken from the sea floor.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1682687220063-4742bd7fd538?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 93,
-    rating: "16+",
-    duration: "1h 50m",
-    tags: ["Oceanic Horror", "Survival", "Mystery"],
-    isOriginal: false,
-  },
-  {
-    id: "curated-8",
-    title: "Apex Predator",
-    description:
-      "In the dense primeval rainforests of the Congo, an elite expedition faces an uncatalogued apex predator engineered by covert gene-splicing cartels.",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80",
-    matchScore: 96,
-    rating: "18+",
-    duration: "2h 01m",
-    tags: ["Action Thriller", "Wilderness", "Suspense"],
-    isOriginal: true,
-  },
-];
+import {
+  CURATED_MOVIES,
+  CURATED_SERIES,
+  ALL_CURATED_MEDIA,
+} from "@/lib/catalog-data";
 
 export default function Home() {
   const [dbVideos, setDbVideos] = useState<FeaturedMovie[]>([]);
@@ -143,6 +24,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("Home");
+  const [subGenre, setSubGenre] = useState("All");
   const [mobileTab, setMobileTab] = useState("home");
 
   const trendingRef = useRef<HTMLDivElement>(null);
@@ -164,6 +46,9 @@ export default function Home() {
           duration: "1h 45m",
           tags: ["User Upload", "ImageKit Stream", "Exclusive"],
           isOriginal: true,
+          type: "movie",
+          genre: "User Upload",
+          releaseYear: "2026",
         }));
         setDbVideos(formatted);
       }
@@ -178,41 +63,80 @@ export default function Home() {
     loadVideos();
   }, []);
 
-  // Combine database videos with curated catalog
-  const allMovies = useMemo(() => {
-    return [...dbVideos, ...CURATED_CATALOG];
-  }, [dbVideos]);
+  // Reset subGenre when switching main categories
+  useEffect(() => {
+    setSubGenre("All");
+  }, [activeCategory]);
 
-  // Featured billboard movie
-  const heroMovie = useMemo(() => {
-    return allMovies[0] || CURATED_CATALOG[0];
-  }, [allMovies]);
+  // Combine database videos with curated catalog for global search
+  const allMedia = useMemo(() => {
+    return [...dbVideos, ...ALL_CURATED_MEDIA];
+  }, [dbVideos]);
 
   // Filtered list when search query is active
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
-    return allMovies.filter(
+    return allMedia.filter(
       (m) =>
         m.title.toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q) ||
+        m.genre?.toLowerCase().includes(q) ||
         m.tags?.some((t) => t.toLowerCase().includes(q))
     );
-  }, [allMovies, searchQuery]);
+  }, [allMedia, searchQuery]);
 
-  // Category Filtering
-  const displayedCatalog = useMemo(() => {
+  // Dynamic Featured Billboard Movie based on current page/category
+  const heroMovie = useMemo(() => {
     if (activeCategory === "TV Shows") {
-      return CURATED_CATALOG.filter((_, idx) => idx % 2 === 0);
+      if (subGenre !== "All") {
+        const match = CURATED_SERIES.find((s) =>
+          s.genre?.toLowerCase() === subGenre.toLowerCase() ||
+          s.tags?.some((t) => t.toLowerCase().includes(subGenre.toLowerCase()))
+        );
+        if (match) return match;
+      }
+      return CURATED_SERIES[0];
     }
+
     if (activeCategory === "Movies") {
-      return CURATED_CATALOG.filter((_, idx) => idx % 2 === 1);
+      if (subGenre !== "All") {
+        const match = CURATED_MOVIES.find((m) =>
+          m.genre?.toLowerCase() === subGenre.toLowerCase() ||
+          m.tags?.some((t) => t.toLowerCase().includes(subGenre.toLowerCase()))
+        );
+        if (match) return match;
+      }
+      return CURATED_MOVIES[0];
     }
-    if (activeCategory === "My List") {
-      return dbVideos.length > 0 ? dbVideos : CURATED_CATALOG.slice(0, 4);
+
+    if (activeCategory === "New & Popular") {
+      return CURATED_MOVIES[1];
     }
-    return CURATED_CATALOG;
-  }, [activeCategory, dbVideos]);
+
+    // Default Home: user's upload or flagship blockbuster
+    return dbVideos[0] || CURATED_MOVIES[0];
+  }, [activeCategory, subGenre, dbVideos]);
+
+  // Filtered movies by subgenre
+  const filteredMovies = useMemo(() => {
+    if (subGenre === "All") return CURATED_MOVIES;
+    return CURATED_MOVIES.filter(
+      (m) =>
+        m.genre?.toLowerCase() === subGenre.toLowerCase() ||
+        m.tags?.some((t) => t.toLowerCase().includes(subGenre.toLowerCase()))
+    );
+  }, [subGenre]);
+
+  // Filtered series by subgenre
+  const filteredSeries = useMemo(() => {
+    if (subGenre === "All") return CURATED_SERIES;
+    return CURATED_SERIES.filter(
+      (s) =>
+        s.genre?.toLowerCase() === subGenre.toLowerCase() ||
+        s.tags?.some((t) => t.toLowerCase().includes(subGenre.toLowerCase()))
+    );
+  }, [subGenre]);
 
   // Handlers
   const handlePlay = (movie: FeaturedMovie) => {
@@ -234,6 +158,7 @@ export default function Home() {
 
   const handleHomeClick = () => {
     setMobileTab("home");
+    setActiveCategory("Home");
     setSearchQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -274,6 +199,13 @@ export default function Home() {
                     alt={movie.title}
                     className="w-full h-full object-cover filter brightness-90 md:group-hover:brightness-105"
                   />
+                  <div className="absolute top-2 right-2">
+                    <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded shadow ${
+                      movie.type === "series" ? "bg-amber-500 text-black" : "bg-black/70 text-zinc-200 border border-zinc-700"
+                    }`}>
+                      {movie.type === "series" ? "SERIES" : "MOVIE"}
+                    </span>
+                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent p-2 sm:p-3 flex flex-col justify-end">
                     <h3 className="font-bold text-[11px] sm:text-sm text-white truncate">
                       {movie.title}
@@ -282,7 +214,7 @@ export default function Home() {
                       <span className="text-emerald-400 font-bold">
                         {movie.matchScore}% Match
                       </span>
-                      <span>{movie.duration}</span>
+                      <span>{movie.type === "series" && movie.seasons ? movie.seasons : movie.duration}</span>
                     </div>
                   </div>
                 </div>
@@ -294,13 +226,13 @@ export default function Home() {
                 Your search for &quot;{searchQuery}&quot; did not match any movies or TV shows.
               </p>
               <p className="text-xs text-zinc-500">
-                Suggestions: Try different keywords, genres, or check your spelling.
+                Suggestions: Try searching by genre (&quot;Sci-Fi&quot;, &quot;Action&quot;), title (&quot;Cosmos&quot;, &quot;Protocol&quot;), or check your spelling.
               </p>
             </div>
           )}
         </main>
       ) : (
-        /* Normal Netflix Homepage Layout */
+        /* Normal Layout */
         <main className="relative pb-8 sm:pb-16">
           {/* Hero Featured Billboard Banner */}
           <HeroBanner
@@ -309,65 +241,309 @@ export default function Home() {
             onMoreInfo={handleSelect}
           />
 
-          {/* Negative top margin pulls rows up over hero gradient bottom */}
-          <div className="relative -mt-12 sm:-mt-24 md:-mt-36 z-30 space-y-3 sm:space-y-5 md:space-y-6">
-            {/* If user uploaded videos in their database, highlight them in the top row */}
-            {dbVideos.length > 0 && (
+          {/* PAGE VIEW: MOVIES */}
+          {activeCategory === "Movies" && (
+            <div className="relative -mt-12 sm:-mt-24 md:-mt-36 z-30 space-y-4 sm:space-y-6 md:space-y-8">
+              {/* Category Title & Genre Pills Sub-header */}
+              <div className="px-3 sm:px-6 md:px-12 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight flex items-center gap-2">
+                    <span>Movies</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+                      Feature Films
+                    </span>
+                  </h1>
+                </div>
+
+                {/* Genre Filter Pills */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
+                  {["All", "Action", "Sci-Fi", "Crime", "Fantasy", "Thriller"].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setSubGenre(g)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+                        subGenre === g
+                          ? "bg-white text-black font-bold shadow-lg scale-105"
+                          : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      {g === "All" ? "All Movies" : g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Distinct Movie Rows */}
+              <div ref={trendingRef}>
+                <MovieRow
+                  title="🔥 Trending Movies Today"
+                  movies={filteredMovies.slice(0, 6)}
+                  onPlay={handlePlay}
+                  onSelect={handleSelect}
+                />
+              </div>
+
               <MovieRow
-                title="✨ Your Uploads & StreamFlix Originals"
-                movies={dbVideos}
+                title="🎬 Hollywood & International Blockbusters"
+                movies={CURATED_MOVIES.slice(2, 8)}
                 onPlay={handlePlay}
                 onSelect={handleSelect}
               />
-            )}
 
-            {/* Trending Now Row */}
-            <div ref={trendingRef}>
               <MovieRow
-                title="🔥 Trending Now"
-                movies={displayedCatalog.slice(0, 6)}
+                title="💥 High-Octane Action & Thrillers"
+                movies={CURATED_MOVIES.filter(
+                  (m) => m.genre === "Action" || m.tags?.includes("Action")
+                )}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="🌌 Mind-Bending Sci-Fi & Cosmic Epics"
+                movies={CURATED_MOVIES.filter(
+                  (m) => m.genre === "Sci-Fi" || m.tags?.includes("Sci-Fi")
+                )}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="🏆 Critically Acclaimed Feature Films"
+                movies={[...CURATED_MOVIES].reverse().slice(0, 7)}
                 onPlay={handlePlay}
                 onSelect={handleSelect}
               />
             </div>
+          )}
 
-            {/* Top 10 / Blockbusters Row */}
-            <MovieRow
-              title="🍿 Top Picks for Tonight"
-              movies={displayedCatalog.slice(2, 8)}
-              onPlay={handlePlay}
-              onSelect={handleSelect}
-            />
+          {/* PAGE VIEW: TV SHOWS (WEB SERIES) */}
+          {activeCategory === "TV Shows" && (
+            <div className="relative -mt-12 sm:-mt-24 md:-mt-36 z-30 space-y-4 sm:space-y-6 md:space-y-8">
+              {/* Category Title & Genre Pills Sub-header */}
+              <div className="px-3 sm:px-6 md:px-12 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight flex items-center gap-2">
+                    <span>TV Shows & Web Series</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                      Binge-Worthy
+                    </span>
+                  </h1>
+                </div>
 
-            {/* Action & Sci-Fi Row */}
-            <MovieRow
-              title="🚀 Sci-Fi & Mind-Bending Adventures"
-              movies={[
-                ...CURATED_CATALOG.filter((m) =>
-                  m.tags?.some((t) => t.includes("Sci-Fi") || t.includes("Action"))
-                ),
-                ...CURATED_CATALOG.slice(0, 3),
-              ]}
-              onPlay={handlePlay}
-              onSelect={handleSelect}
-            />
+                {/* Genre Filter Pills */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1">
+                  {["All", "Sci-Fi", "Mystery", "Crime", "Drama", "Horror"].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setSubGenre(g)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+                        subGenre === g
+                          ? "bg-amber-500 text-black font-bold shadow-lg scale-105"
+                          : "bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      {g === "All" ? "All Series" : g}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            {/* Thrillers & Mystery */}
-            <MovieRow
-              title="🌌 Gripping Thrillers & Cult Classics"
-              movies={CURATED_CATALOG.slice(3, 8)}
-              onPlay={handlePlay}
-              onSelect={handleSelect}
-            />
+              {/* Distinct Web Series Rows */}
+              <div ref={trendingRef}>
+                <MovieRow
+                  title="📺 Top 10 Web Series Today"
+                  movies={filteredSeries.slice(0, 6)}
+                  onPlay={handlePlay}
+                  onSelect={handleSelect}
+                />
+              </div>
 
-            {/* Award-Winning Row */}
-            <MovieRow
-              title="🏆 Award-Winning Cinematic Masterpieces"
-              movies={[...displayedCatalog].reverse()}
-              onPlay={handlePlay}
-              onSelect={handleSelect}
-            />
-          </div>
+              <MovieRow
+                title="☕ Binge-Worthy Crime & Mystery Shows"
+                movies={CURATED_SERIES.filter(
+                  (s) => s.genre === "Crime" || s.genre === "Mystery"
+                )}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="🤖 Futuristic Sci-Fi & Cyber Anthologies"
+                movies={CURATED_SERIES.filter((s) => s.genre === "Sci-Fi")}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="👑 Imperial Court & Dynasty Dramas"
+                movies={CURATED_SERIES.filter((s) => s.genre === "Drama")}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="⚡ Chilling Thrillers & Mini-Series"
+                movies={CURATED_SERIES.filter(
+                  (s) =>
+                    s.seasons?.includes("Limited") ||
+                    s.tags?.includes("Chilling") ||
+                    s.tags?.includes("Gothic")
+                )}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+            </div>
+          )}
+
+          {/* PAGE VIEW: NEW & POPULAR */}
+          {activeCategory === "New & Popular" && (
+            <div className="relative -mt-12 sm:-mt-24 md:-mt-36 z-30 space-y-4 sm:space-y-6 md:space-y-8">
+              <div className="px-3 sm:px-6 md:px-12 pt-2">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+                  New & Popular
+                </h1>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                  Fresh 2026 releases, trending seasons, and most-watched titles.
+                </p>
+              </div>
+
+              <MovieRow
+                title="🆕 Brand New 2026 Movie Releases"
+                movies={CURATED_MOVIES.filter((m) => m.releaseYear === "2026")}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="✨ New Web Series Seasons"
+                movies={CURATED_SERIES.filter((s) => s.releaseYear === "2026")}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              <MovieRow
+                title="🔥 Top 10 Trending Globally"
+                movies={ALL_CURATED_MEDIA.slice(0, 8)}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+            </div>
+          )}
+
+          {/* PAGE VIEW: MY LIST */}
+          {activeCategory === "My List" && (
+            <div className="relative -mt-12 sm:-mt-24 md:-mt-36 z-30 space-y-4 sm:space-y-6 md:space-y-8">
+              <div className="px-3 sm:px-6 md:px-12 pt-2">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+                  My List & Your Uploads
+                </h1>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                  Videos and titles saved to your catalog.
+                </p>
+              </div>
+
+              {dbVideos.length > 0 ? (
+                <MovieRow
+                  title="✨ Your Uploaded Catalog"
+                  movies={dbVideos}
+                  onPlay={handlePlay}
+                  onSelect={handleSelect}
+                />
+              ) : (
+                <div className="px-3 sm:px-6 md:px-12 py-8 bg-zinc-900/60 rounded-lg mx-3 sm:mx-6 md:mx-12 border border-zinc-800 text-center space-y-3">
+                  <p className="text-zinc-300 text-sm sm:text-base">
+                    You haven&apos;t uploaded any videos yet.
+                  </p>
+                  <button
+                    onClick={() => setIsUploadOpen(true)}
+                    className="bg-[#E50914] hover:bg-[#c11119] text-white text-xs sm:text-sm font-bold px-4 py-2 rounded shadow transition-colors"
+                  >
+                    Upload Video to Catalog
+                  </button>
+                </div>
+              )}
+
+              <MovieRow
+                title="⭐ Recommended For You"
+                movies={CURATED_MOVIES.slice(0, 6)}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+            </div>
+          )}
+
+          {/* PAGE VIEW: HOME (DEFAULT MIXED EXPERIENCE) */}
+          {(activeCategory === "Home" || activeCategory === "Browse by Languages") && (
+            <div className="relative -mt-12 sm:-mt-24 md:-mt-36 z-30 space-y-3 sm:space-y-5 md:space-y-6">
+              {/* If user uploaded videos in their database, highlight them in the top row */}
+              {dbVideos.length > 0 && (
+                <MovieRow
+                  title="✨ Your Uploads & StreamFlix Originals"
+                  movies={dbVideos}
+                  onPlay={handlePlay}
+                  onSelect={handleSelect}
+                />
+              )}
+
+              {/* Trending Movies Row */}
+              <div ref={trendingRef}>
+                <MovieRow
+                  title="🔥 Trending Movies"
+                  movies={CURATED_MOVIES.slice(0, 6)}
+                  onPlay={handlePlay}
+                  onSelect={handleSelect}
+                />
+              </div>
+
+              {/* Binge-Worthy Web Series Row */}
+              <MovieRow
+                title="📺 Binge-Worthy Web Series"
+                movies={CURATED_SERIES.slice(0, 6)}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              {/* Blockbuster Top Picks */}
+              <MovieRow
+                title="🍿 Top Movie Picks for Tonight"
+                movies={CURATED_MOVIES.slice(2, 8)}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              {/* Dark Crime & Thrillers Web Series */}
+              <MovieRow
+                title="☕ Crime, Dark & Mystery Shows"
+                movies={CURATED_SERIES.slice(2, 8)}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              {/* Sci-Fi & Cyberpunk Adventures */}
+              <MovieRow
+                title="🚀 Sci-Fi & Cyberpunk Hits"
+                movies={[
+                  CURATED_MOVIES[1],
+                  CURATED_SERIES[0],
+                  CURATED_MOVIES[8],
+                  CURATED_SERIES[10],
+                  CURATED_MOVIES[0],
+                  CURATED_SERIES[8],
+                ]}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+
+              {/* Award-Winning Row */}
+              <MovieRow
+                title="🏆 Award-Winning Cinematic Masterpieces"
+                movies={ALL_CURATED_MEDIA.filter((m) => m.isOriginal).slice(0, 8)}
+                onPlay={handlePlay}
+                onSelect={handleSelect}
+              />
+            </div>
+          )}
         </main>
       )}
 
@@ -377,7 +553,7 @@ export default function Home() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onPlayMovie={handlePlay}
-        similarMovies={allMovies.filter((m) => m.id !== selectedMovie?.id)}
+        similarMovies={allMedia.filter((m) => m.id !== selectedMovie?.id && m.type === selectedMovie?.type)}
       />
 
       {/* ImageKit / Video Upload Modal */}

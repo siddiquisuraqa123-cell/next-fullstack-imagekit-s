@@ -107,8 +107,19 @@ export default function MovieRow({
                   </div>
                 )}
 
+                {/* Film or Series badge in top right */}
+                <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10">
+                  <span className={`font-extrabold text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded shadow backdrop-blur-sm ${
+                    movie.type === "series"
+                      ? "bg-amber-500/80 text-black"
+                      : "bg-black/60 text-zinc-200 border border-zinc-700/60"
+                  }`}>
+                    {movie.type === "series" ? "SERIES" : "MOVIE"}
+                  </span>
+                </div>
+
                 {/* Mobile Persistent Card Info Overlay (Always visible on mobile touch screens) */}
-                <div className="md:hidden absolute inset-x-0 bottom-0 p-1.5 sm:p-2 bg-gradient-to-t from-black via-black/70 to-transparent flex flex-col justify-end">
+                <div className="md:hidden absolute inset-x-0 bottom-0 p-1.5 sm:p-2 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end">
                   <h3 className="font-bold text-white text-[11px] sm:text-xs truncate">
                     {movie.title}
                   </h3>
@@ -116,9 +127,15 @@ export default function MovieRow({
                     <span className="text-emerald-400 font-bold">
                       {movie.matchScore ?? 97}%
                     </span>
-                    <span className="border border-zinc-600 px-0.5 rounded text-[8px]">
-                      {movie.rating ?? "16+"}
-                    </span>
+                    {movie.type === "series" && movie.seasons ? (
+                      <span className="text-amber-400 font-semibold text-[8px]">
+                        {movie.seasons}
+                      </span>
+                    ) : (
+                      <span className="border border-zinc-600 px-0.5 rounded text-[8px]">
+                        {movie.rating ?? "16+"}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -198,7 +215,13 @@ export default function MovieRow({
                       <span className="text-zinc-400 border border-zinc-600 px-1 py-0.2 rounded text-[9px]">
                         {movie.rating ?? "16+"}
                       </span>
-                      <span className="text-zinc-400">{movie.duration ?? "1h 48m"}</span>
+                      {movie.type === "series" && movie.seasons ? (
+                        <span className="text-amber-400 font-medium text-[10px] bg-amber-500/10 border border-amber-500/30 px-1 rounded">
+                          {movie.seasons}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400">{movie.duration ?? "1h 48m"}</span>
+                      )}
                       <span className="text-zinc-300 font-semibold border border-zinc-700 px-1 rounded text-[9px]">
                         HD
                       </span>

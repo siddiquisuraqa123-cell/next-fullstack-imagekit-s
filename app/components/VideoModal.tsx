@@ -160,14 +160,25 @@ export default function VideoModal({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="md:col-span-2 space-y-2.5">
               <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm font-semibold">
+                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase shadow ${
+                  movie.type === "series" ? "bg-amber-600 text-white" : "bg-[#E50914] text-white"
+                }`}>
+                  {movie.type === "series" ? "SERIES" : "FILM"}
+                </span>
                 <span className="text-emerald-400 font-bold">
                   {movie.matchScore ?? 98}% Match
                 </span>
-                <span className="text-zinc-400">2026</span>
+                <span className="text-zinc-400">{movie.releaseYear || "2026"}</span>
                 <span className="border border-zinc-600 px-1.5 py-0.5 text-[10px] sm:text-xs text-zinc-300 rounded">
                   {movie.rating ?? "16+"}
                 </span>
-                <span className="text-zinc-300">{movie.duration ?? "1h 55m"}</span>
+                {movie.type === "series" && movie.seasons ? (
+                  <span className="text-amber-400 font-semibold border border-amber-500/40 px-1.5 py-0.5 rounded bg-amber-500/10">
+                    {movie.seasons}
+                  </span>
+                ) : (
+                  <span className="text-zinc-300">{movie.duration ?? "1h 55m"}</span>
+                )}
                 <span className="border border-zinc-500 text-zinc-300 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded">
                   Ultra HD 4K
                 </span>
@@ -196,7 +207,9 @@ export default function VideoModal({
                 </span>
               </div>
               <div>
-                <span className="text-zinc-500 font-medium">This film is: </span>
+                <span className="text-zinc-500 font-medium">
+                  {movie.type === "series" ? "This show is: " : "This film is: "}
+                </span>
                 <span className="text-zinc-300">
                   Mind-Bending, Suspenseful, Visually Stunning
                 </span>
