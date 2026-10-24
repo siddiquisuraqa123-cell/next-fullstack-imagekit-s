@@ -17,7 +17,6 @@ export default function MobileBottomNav({
   onSearchClick,
   onUploadClick,
   onHomeClick,
-  onTrendingClick,
   onProfileClick,
   activeTab = "home",
 }: MobileBottomNavProps) {
@@ -75,24 +74,19 @@ export default function MobileBottomNav({
           <span className="text-[9px] font-bold text-zinc-300">Upload</span>
         </button>
 
-        {/* Trending / New */}
-        <button
-          onClick={onTrendingClick}
+        {/* YouTube */}
+        <Link
+          href="/youtube"
           className={`flex flex-col items-center justify-center gap-1 w-full h-full transition-colors ${
-            activeTab === "trending" ? "text-white" : "text-zinc-500 hover:text-zinc-300"
+            activeTab === "youtube" ? "text-red-500 font-bold" : "text-zinc-500 hover:text-red-400"
           }`}
-          aria-label="New & Popular"
+          aria-label="YouTube Hub"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-            />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
           </svg>
-          <span className="text-[10px] font-medium tracking-tight">Trending</span>
-        </button>
+          <span className="text-[10px] font-medium tracking-tight">YouTube</span>
+        </Link>
 
         {/* Profile / Account */}
         <button

@@ -1,12 +1,13 @@
 import { IVideo } from "@/model/video";
+import { YouTubeSearchApiResponse } from "@/types/youtube";
 
 export type VideoFormData = Omit<IVideo, "_id">;
 
 type FetchOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE";
-  body?: any
-  headers?: Record<string, string>
-}
+  body?: any;
+  headers?: Record<string, string>;
+};
 
 class ApiClient {
   private async fetch<T>(
@@ -41,6 +42,16 @@ class ApiClient {
       body: videoData,
     });
   }
+
+  async searchYouTube(query: string, pageToken?: string) {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (pageToken) params.set("pageToken", pageToken);
+    const queryString = params.toString();
+    return this.fetch<YouTubeSearchApiResponse>(
+      `/youtube${queryString ? `?${queryString}` : ""}`
+    );
+  }
 }
 
-export const apiClient = new ApiClient()
+export const apiClient = new ApiClient();

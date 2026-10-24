@@ -14,6 +14,8 @@ export default withAuth(
         const { pathname } = req.nextUrl;
         if (
           pathname === "/" ||
+          pathname.startsWith("/youtube") ||
+          pathname.startsWith("/api/youtube") ||
           pathname.startsWith("/api/auth") ||
           pathname.startsWith("/api/imagekit-auth") ||
           pathname.startsWith("/api/video") ||

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 interface NavbarProps {
@@ -18,13 +19,17 @@ export default function Navbar({
   onSelectCategory,
   activeCategory = "Home",
 }: NavbarProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { data: session } = useSession();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
-  const [currentCategory, setCurrentCategory] = useState(activeCategory);
+
+  // Derive currentCategory from pathname and activeCategory prop
+  const currentCategory = pathname === "/youtube" ? "YouTube" : activeCategory;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,11 +44,6 @@ export default function Navbar({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Sync internal state when activeCategory prop changes
-  useEffect(() => {
-    setCurrentCategory(activeCategory);
-  }, [activeCategory]);
-
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
@@ -53,7 +53,20 @@ export default function Navbar({
   };
 
   const handleSelectNavCategory = (cat: string) => {
-    setCurrentCategory(cat);
+    if (cat === "YouTube") {
+      setShowMobileDrawer(false);
+      if (pathname !== "/youtube") {
+        router.push("/youtube");
+      }
+      return;
+    }
+
+    if (pathname !== "/") {
+      setShowMobileDrawer(false);
+      router.push(`/?category=${encodeURIComponent(cat)}`);
+      return;
+    }
+
     if (onSelectCategory) {
       onSelectCategory(cat);
     }
@@ -65,6 +78,7 @@ export default function Navbar({
     "TV Shows",
     "Movies",
     "New & Popular",
+    "YouTube",
     "My List",
     "Browse by Languages",
   ];
@@ -102,19 +116,44 @@ export default function Navbar({
 
             {/* Desktop Navigation Links */}
             <nav className="hidden md:flex items-center gap-5 text-sm font-medium">
-              {navLinks.map((item) => (
-                <button
-                  key={item}
-                  onClick={() => handleSelectNavCategory(item)}
-                  className={`transition-colors duration-200 text-sm ${
-                    currentCategory === item
-                      ? "text-white font-bold"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
+              {navLinks.map((item) => {
+                if (item === "YouTube") {
+                  return (
+                    <button
+                      key={item}
+                      onClick={() => handleSelectNavCategory(item)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all duration-200 ${
+                        currentCategory === "YouTube"
+                          ? "bg-[#E50914] text-white shadow-lg shadow-red-600/50 scale-105"
+                          : "bg-red-600/20 text-red-300 hover:bg-red-600 hover:text-white border border-red-500/40"
+                      }`}
+                      title="Explore YouTube on StreamFlix"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                      </svg>
+                      <span>YouTube</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/50 text-white font-extrabold uppercase">
+                        New
+                      </span>
+                    </button>
+                  );
+                }
+
+                return (
+                  <button
+                    key={item}
+                    onClick={() => handleSelectNavCategory(item)}
+                    className={`transition-colors duration-200 text-sm ${
+                      currentCategory === item
+                        ? "text-white font-bold"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
@@ -376,19 +415,31 @@ export default function Navbar({
 
         {/* Mobile Sub-Header Category Carousel (Like native Netflix mobile) */}
         <div className="md:hidden flex items-center gap-2 px-3 pb-2 pt-1 overflow-x-auto no-scrollbar scroll-smooth">
-          {navLinks.map((item) => (
-            <button
-              key={item}
-              onClick={() => handleSelectNavCategory(item)}
-              className={`flex-none px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 border ${
-                currentCategory === item
-                  ? "bg-white text-black font-bold border-white shadow-sm"
-                  : "bg-black/40 text-zinc-300 border-zinc-700/80 active:bg-zinc-800"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
+          {navLinks.map((item) => {
+            const isYT = item === "YouTube";
+            return (
+              <button
+                key={item}
+                onClick={() => handleSelectNavCategory(item)}
+                className={`flex-none px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 border flex items-center gap-1 ${
+                  currentCategory === item
+                    ? isYT
+                      ? "bg-[#E50914] text-white font-bold border-[#E50914] shadow-md shadow-red-600/40"
+                      : "bg-white text-black font-bold border-white shadow-sm"
+                    : isYT
+                    ? "bg-red-950/60 text-red-200 border-red-800/80 font-bold active:bg-red-900"
+                    : "bg-black/40 text-zinc-300 border-zinc-700/80 active:bg-zinc-800"
+                }`}
+              >
+                {isYT && (
+                  <svg className="w-3 h-3 fill-current text-white" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                  </svg>
+                )}
+                <span>{item}</span>
+              </button>
+            );
+          })}
         </div>
       </header>
 
@@ -459,19 +510,36 @@ export default function Navbar({
                 <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider px-2">
                   Browse
                 </p>
-                {navLinks.map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => handleSelectNavCategory(item)}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      currentCategory === item
-                        ? "bg-zinc-800 text-[#E50914] font-bold"
-                        : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ))}
+                {navLinks.map((item) => {
+                  const isYT = item === "YouTube";
+                  return (
+                    <button
+                      key={item}
+                      onClick={() => handleSelectNavCategory(item)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${
+                        currentCategory === item
+                          ? "bg-zinc-800 text-[#E50914] font-bold"
+                          : isYT
+                          ? "bg-red-950/30 text-red-300 hover:bg-zinc-900 font-semibold"
+                          : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {isYT && (
+                          <svg className="w-4 h-4 fill-current text-red-500" viewBox="0 0 24 24">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                          </svg>
+                        )}
+                        <span>{item}</span>
+                      </div>
+                      {isYT && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600 text-white font-bold uppercase tracking-wider">
+                          New
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
