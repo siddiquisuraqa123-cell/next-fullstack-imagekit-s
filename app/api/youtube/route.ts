@@ -21,10 +21,11 @@ function decodeHtmlEntities(str: string): string {
 }
 
 const PREVIEW_VIDEOS: YouTubeVideoItem[] = [
+  // Blockbuster Entertainment & Cinema
   {
     id: "TcMBFSGVi1c",
     title: "Marvel Studios' Avengers: Endgame - Official Trailer",
-    description: "Part of the journey is the end. Marvel Studios' Avengers: Endgame is in theaters.",
+    description: "Part of the journey is the end. Marvel Studios' Avengers: Endgame in theaters.",
     thumbnailUrl: "https://img.youtube.com/vi/TcMBFSGVi1c/hqdefault.jpg",
     channelTitle: "Marvel Entertainment",
     publishedAt: "2019-04-26T00:00:00Z",
@@ -85,6 +86,81 @@ const PREVIEW_VIDEOS: YouTubeVideoItem[] = [
     channelTitle: "Sony Pictures Entertainment",
     publishedAt: "2023-04-04T00:00:00Z",
   },
+  // Gaming
+  {
+    id: "QdBZY2fkU-0",
+    title: "Grand Theft Auto VI Trailer 1",
+    description: "Grand Theft Auto VI heads to the state of Leonida, home to the neon-soaked streets of Vice City and beyond.",
+    thumbnailUrl: "https://img.youtube.com/vi/QdBZY2fkU-0/hqdefault.jpg",
+    channelTitle: "Rockstar Games",
+    publishedAt: "2023-12-04T00:00:00Z",
+  },
+  {
+    id: "EE-4GvjKcfs",
+    title: "ELDEN RING – Official Gameplay Reveal Trailer",
+    description: "Rise, Tarnished, and be guided by grace to brandish the power of the Elden Ring.",
+    thumbnailUrl: "https://img.youtube.com/vi/EE-4GvjKcfs/hqdefault.jpg",
+    channelTitle: "Bandai Namco Entertainment",
+    publishedAt: "2021-06-10T00:00:00Z",
+  },
+  {
+    id: "4NRXx6U8ABQ",
+    title: "Black Myth: Wukong - Official Gameplay Trailer",
+    description: "Experience the mythic journey of the Destined One in Black Myth: Wukong.",
+    thumbnailUrl: "https://img.youtube.com/vi/4NRXx6U8ABQ/hqdefault.jpg",
+    channelTitle: "Game Science",
+    publishedAt: "2024-01-18T00:00:00Z",
+  },
+  // Technology
+  {
+    id: "Vb9nBcxQh_g",
+    title: "Introducing Apple Vision Pro - Spatial Computing",
+    description: "The era of spatial computing is here. Apple Vision Pro seamlessly blends digital content with your physical space.",
+    thumbnailUrl: "https://img.youtube.com/vi/Vb9nBcxQh_g/hqdefault.jpg",
+    channelTitle: "Apple",
+    publishedAt: "2023-06-05T00:00:00Z",
+  },
+  {
+    id: "29ECwExc-_M",
+    title: "SpaceX Starship Integrated Flight Test - Highlights",
+    description: "Starship's integrated flight test lifting off from Starbase in Boca Chica, Texas.",
+    thumbnailUrl: "https://img.youtube.com/vi/29ECwExc-_M/hqdefault.jpg",
+    channelTitle: "SpaceX",
+    publishedAt: "2023-04-20T00:00:00Z",
+  },
+  {
+    id: "fn3K35Ut64o",
+    title: "Atlas | Boston Dynamics - The Next Generation",
+    description: "A new fully electric Atlas humanoid robot designed for real-world applications.",
+    thumbnailUrl: "https://img.youtube.com/vi/fn3K35Ut64o/hqdefault.jpg",
+    channelTitle: "Boston Dynamics",
+    publishedAt: "2024-04-17T00:00:00Z",
+  },
+  // Music & Concerts
+  {
+    id: "fJ9rUzIMcZQ",
+    title: "Queen – Bohemian Rhapsody (Official Video Remastered)",
+    description: "The official Bohemian Rhapsody music video. Remastered in HD.",
+    thumbnailUrl: "https://img.youtube.com/vi/fJ9rUzIMcZQ/hqdefault.jpg",
+    channelTitle: "Queen Official",
+    publishedAt: "2008-08-01T00:00:00Z",
+  },
+  {
+    id: "JGwWNGJdvx8",
+    title: "Ed Sheeran - Shape of You (Official Music Video)",
+    description: "The official music video for Ed Sheeran - Shape of You.",
+    thumbnailUrl: "https://img.youtube.com/vi/JGwWNGJdvx8/hqdefault.jpg",
+    channelTitle: "Ed Sheeran",
+    publishedAt: "2017-01-30T00:00:00Z",
+  },
+  {
+    id: "OPf0YbXqDm0",
+    title: "Mark Ronson - Uptown Funk (Official Video) ft. Bruno Mars",
+    description: "Official Video for Uptown Funk by Mark Ronson ft. Bruno Mars.",
+    thumbnailUrl: "https://img.youtube.com/vi/OPf0YbXqDm0/hqdefault.jpg",
+    channelTitle: "MarkRonsonVEVO",
+    publishedAt: "2014-11-19T00:00:00Z",
+  },
 ];
 
 export async function GET(request: NextRequest) {
@@ -93,23 +169,35 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = (searchParams.get("q") || "").trim() || "trending movie trailers";
     const pageToken = (searchParams.get("pageToken") || "").trim();
+    const maxResultsParam = parseInt(searchParams.get("maxResults") || "18", 10);
+    const maxResults = Math.min(Math.max(isNaN(maxResultsParam) ? 18 : maxResultsParam, 1), 25);
 
     // If API key is not configured, return preview trailers so the UI and embedded player work immediately
     if (!apiKey) {
-      const filtered = query
-        ? PREVIEW_VIDEOS.filter(
-            (v) =>
-              v.title.toLowerCase().includes(query.toLowerCase()) ||
-              v.channelTitle.toLowerCase().includes(query.toLowerCase()) ||
-              v.description.toLowerCase().includes(query.toLowerCase())
-          )
-        : PREVIEW_VIDEOS;
+      const qLower = query.toLowerCase();
+      let filtered = PREVIEW_VIDEOS.filter(
+        (v) =>
+          v.title.toLowerCase().includes(qLower) ||
+          v.channelTitle.toLowerCase().includes(qLower) ||
+          v.description.toLowerCase().includes(qLower)
+      );
+
+      // If category keyword matches Gaming, Tech, Music, etc.
+      if (filtered.length === 0) {
+        if (qLower.includes("gaming") || qLower.includes("game")) {
+          filtered = PREVIEW_VIDEOS.filter((v) => ["QdBZY2fkU-0", "EE-4GvjKcfs", "4NRXx6U8ABQ"].includes(v.id));
+        } else if (qLower.includes("tech") || qLower.includes("apple") || qLower.includes("space")) {
+          filtered = PREVIEW_VIDEOS.filter((v) => ["Vb9nBcxQh_g", "29ECwExc-_M", "fn3K35Ut64o"].includes(v.id));
+        } else if (qLower.includes("music") || qLower.includes("song") || qLower.includes("concert")) {
+          filtered = PREVIEW_VIDEOS.filter((v) => ["fJ9rUzIMcZQ", "JGwWNGJdvx8", "OPf0YbXqDm0"].includes(v.id));
+        }
+      }
 
       return NextResponse.json({
         error:
           "YouTube API key is not configured in .env.local or Vercel. Showing preview trailers so you can test the embedded player right now. Set YOUTUBE_API_KEY to enable live searches.",
         isKeyMissing: true,
-        videos: filtered.length > 0 ? filtered : PREVIEW_VIDEOS,
+        videos: (filtered.length > 0 ? filtered : PREVIEW_VIDEOS).slice(0, maxResults),
         query,
       } satisfies YouTubeSearchApiResponse);
     }
@@ -120,7 +208,7 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("part", "snippet");
     url.searchParams.set("type", "video");
     url.searchParams.set("videoEmbeddable", "true");
-    url.searchParams.set("maxResults", "18");
+    url.searchParams.set("maxResults", String(maxResults));
     url.searchParams.set("q", query);
     url.searchParams.set("key", apiKey);
 

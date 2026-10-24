@@ -18,12 +18,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#141414",
+  themeColor: "#090e13",
 };
 
 export const metadata: Metadata = {
-  title: "StreamFlix - Watch TV Shows & Movies Online",
-  description: "Cinematic video streaming powered by Next.js & ImageKit",
+  title: "StreamFlix - Modern Streaming Dashboard",
+  description: "Cinematic video streaming powered by real YouTube videos & ImageKit",
   applicationName: "StreamFlix",
   appleWebApp: {
     capable: true,
@@ -45,7 +45,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-[#141414] text-white">
+      <body className="min-h-full flex flex-col bg-[#090e13] text-white">
         <Providers>{children}</Providers>
       </body>
     </html>

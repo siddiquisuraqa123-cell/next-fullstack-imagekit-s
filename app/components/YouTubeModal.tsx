@@ -62,7 +62,7 @@ export default function YouTubeModal({ video, isOpen, onClose }: YouTubeModalPro
 
       {/* Modal Dialog Card */}
       <div
-        className="relative w-full max-w-4xl bg-[#181818] rounded-t-2xl sm:rounded-xl overflow-hidden shadow-2xl border border-zinc-800 text-white z-10 max-h-[94vh] flex flex-col animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200"
+        className="relative w-full max-w-4xl bg-[#0c131a] rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-2xl border border-[#1b2b3a] text-white z-10 max-h-[94vh] flex flex-col animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Floating Close Button */}

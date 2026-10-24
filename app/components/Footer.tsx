@@ -13,7 +13,7 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="w-full bg-[#141414] text-zinc-500 text-xs px-4 sm:px-6 md:px-12 py-10 md:py-16 mt-10 md:mt-16 border-t border-zinc-900 select-none mb-16 md:mb-0">
+    <footer className="w-full bg-[#090e13] text-slate-500 text-xs px-4 sm:px-6 md:px-12 py-10 md:py-16 mt-10 md:mt-16 border-t border-[#182635] select-none mb-16 md:mb-0">
       <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
         {/* Social Icons with touch targets */}
         <div className="flex items-center gap-5 sm:gap-6 text-zinc-300">

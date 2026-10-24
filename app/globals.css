@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #141414;
-  --foreground: #ffffff;
+  --background: #090e13;
+  --foreground: #f8fafc;
 }
 
 @theme inline {
@@ -13,8 +13,8 @@
 }
 
 body {
-  background: #141414;
-  color: #ffffff;
+  background: #090e13;
+  color: #f8fafc;
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;

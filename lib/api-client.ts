@@ -43,10 +43,11 @@ class ApiClient {
     });
   }
 
-  async searchYouTube(query: string, pageToken?: string) {
+  async searchYouTube(query: string, pageToken?: string, maxResults?: number) {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (pageToken) params.set("pageToken", pageToken);
+    if (maxResults) params.set("maxResults", String(maxResults));
     const queryString = params.toString();
     return this.fetch<YouTubeSearchApiResponse>(
       `/youtube${queryString ? `?${queryString}` : ""}`
