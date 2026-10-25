@@ -290,8 +290,8 @@ export default function YouTubeModal({
           </button>
         </div>
 
-        {/* 1. PLAYER SECTION: Official YouTube Embedded Player at the top */}
-        <div className="relative aspect-video w-full bg-black flex-shrink-0 overflow-hidden shadow-2xl border-b border-[#1b2b3a]">
+        {/* 1. PLAYER SECTION: Official YouTube Embedded Player at the top (Sticky on scroll) */}
+        <div className="sticky top-0 z-40 aspect-video w-full bg-black flex-shrink-0 overflow-hidden shadow-2xl border-b border-[#1b2b3a]">
           <iframe
             key={currentVideo.id}
             src={`https://www.youtube-nocookie.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1`}
