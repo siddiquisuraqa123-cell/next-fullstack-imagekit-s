@@ -27,6 +27,7 @@ export default function YouTubePage() {
   const [videos, setVideos] = useState<YouTubeVideoItem[]>([]);
   const [nextPageToken, setNextPageToken] = useState<string | undefined>(undefined);
   const [selectedVideo, setSelectedVideo] = useState<YouTubeVideoItem | null>(null);
+  const [favorites, setFavorites] = useState<YouTubeVideoItem[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -34,6 +35,56 @@ export default function YouTubePage() {
   const [isKeyMissing, setIsKeyMissing] = useState(false);
 
   const [, startTransition] = useTransition();
+
+  // Load Saved Favorites from LocalStorage on mount
+  useEffect(() => {
+    try {
+      const savedFavs = localStorage.getItem("streamflix_favorites");
+      if (savedFavs) {
+        setFavorites(JSON.parse(savedFavs));
+      }
+    } catch (e) {
+      console.warn("Could not load local storage favorites:", e);
+    }
+
+    const handleFavoritesSync = () => {
+      try {
+        const savedFavs = localStorage.getItem("streamflix_favorites");
+        if (savedFavs) {
+          setFavorites(JSON.parse(savedFavs));
+        }
+      } catch (e) {
+        console.warn("Could not reload favorites:", e);
+      }
+    };
+
+    window.addEventListener("streamflix_favorites_updated", handleFavoritesSync);
+    window.addEventListener("storage", handleFavoritesSync);
+    return () => {
+      window.removeEventListener("streamflix_favorites_updated", handleFavoritesSync);
+      window.removeEventListener("storage", handleFavoritesSync);
+    };
+  }, []);
+
+  // Sync Favorites to LocalStorage
+  const handleToggleFavorite = useCallback((video: YouTubeVideoItem) => {
+    setFavorites((prev) => {
+      const exists = prev.some((v) => v.id === video.id);
+      let updated: YouTubeVideoItem[];
+      if (exists) {
+        updated = prev.filter((v) => v.id !== video.id);
+      } else {
+        updated = [video, ...prev];
+      }
+      try {
+        localStorage.setItem("streamflix_favorites", JSON.stringify(updated));
+        window.dispatchEvent(new Event("streamflix_favorites_updated"));
+      } catch (e) {
+        console.warn("Could not save favorites:", e);
+      }
+      return updated;
+    });
+  }, []);
 
   // Primary fetch handler
   const fetchVideos = useCallback(
@@ -364,6 +415,45 @@ export default function YouTubePage() {
                     <span>YouTube</span>
                   </div>
 
+                  {/* Quick Favorite Icon Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleFavorite(video);
+                    }}
+                    className={`absolute top-2 right-2 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all z-20 backdrop-blur-md ${
+                      favorites.some((v) => v.id === video.id)
+                        ? "bg-red-600/90 text-white shadow-md shadow-red-600/40"
+                        : "bg-black/60 text-zinc-300 hover:text-white hover:bg-black/80"
+                    }`}
+                    aria-label={
+                      favorites.some((v) => v.id === video.id)
+                        ? "Remove Favorite"
+                        : "Add to Favorites"
+                    }
+                    title={
+                      favorites.some((v) => v.id === video.id)
+                        ? "Remove Favorite"
+                        : "Add to Favorites"
+                    }
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                        favorites.some((v) => v.id === video.id)
+                          ? "fill-current"
+                          : "fill-none stroke-current"
+                      }`}
+                      viewBox="0 0 24 24"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                      />
+                    </svg>
+                  </button>
+
                   {/* Play Button Indicator */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <div className="w-11 h-11 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-xl shadow-red-600/40 transform group-hover:scale-110 transition-transform pl-0.5">
@@ -435,6 +525,9 @@ export default function YouTubePage() {
         video={selectedVideo}
         isOpen={Boolean(selectedVideo)}
         onClose={() => setSelectedVideo(null)}
+        isFavorite={selectedVideo ? favorites.some((v) => v.id === selectedVideo.id) : false}
+        onToggleFavorite={handleToggleFavorite}
+        onSelectVideo={(v) => setSelectedVideo(v)}
       />
 
       {/* Brand Footer */}

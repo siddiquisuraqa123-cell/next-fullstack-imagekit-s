@@ -74,6 +74,24 @@ export default function Home() {
     } catch (e) {
       console.warn("Could not load local storage data:", e);
     }
+
+    const handleFavoritesSync = () => {
+      try {
+        const savedFavs = localStorage.getItem("streamflix_favorites");
+        if (savedFavs) {
+          setFavorites(JSON.parse(savedFavs));
+        }
+      } catch (e) {
+        console.warn("Could not reload favorites:", e);
+      }
+    };
+
+    window.addEventListener("streamflix_favorites_updated", handleFavoritesSync);
+    window.addEventListener("storage", handleFavoritesSync);
+    return () => {
+      window.removeEventListener("streamflix_favorites_updated", handleFavoritesSync);
+      window.removeEventListener("storage", handleFavoritesSync);
+    };
   }, []);
 
   // Sync Favorites to LocalStorage
@@ -88,6 +106,7 @@ export default function Home() {
       }
       try {
         localStorage.setItem("streamflix_favorites", JSON.stringify(updated));
+        window.dispatchEvent(new Event("streamflix_favorites_updated"));
       } catch (e) {
         console.warn("Could not save favorites:", e);
       }
@@ -877,6 +896,9 @@ export default function Home() {
         video={selectedYouTubeVideo}
         isOpen={Boolean(selectedYouTubeVideo)}
         onClose={() => setSelectedYouTubeVideo(null)}
+        isFavorite={selectedYouTubeVideo ? favorites.some((v) => v.id === selectedYouTubeVideo.id) : false}
+        onToggleFavorite={handleToggleFavorite}
+        onSelectVideo={handlePlayVideo}
       />
 
       {/* ImageKit / Video Upload Modal */}
