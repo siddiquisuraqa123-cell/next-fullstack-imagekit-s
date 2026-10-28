@@ -12,6 +12,7 @@ export interface YouTubeVideoItem {
   channelTitle: string;
   channelId?: string;
   publishedAt: string;
+  isEmbeddable?: boolean;
 }
 
 export interface YouTubeSearchApiResponse {
@@ -21,4 +22,6 @@ export interface YouTubeSearchApiResponse {
   query: string;
   error?: string;
   isKeyMissing?: boolean;
+  regionCode?: string;
 }
+

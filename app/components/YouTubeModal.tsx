@@ -3,6 +3,14 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { YouTubeVideoItem } from "@/types/youtube";
 import { apiClient } from "@/lib/api-client";
+import YouTubePlayer from "./YouTubePlayer";
+import {
+  filterAvailableVideos,
+  markVideoUnavailable,
+  getUnavailableVideoIds,
+  pickReplacementVideo,
+} from "@/lib/unavailable-videos";
+
 
 export interface YouTubeModalProps {
   video: YouTubeVideoItem | null;
@@ -90,7 +98,22 @@ export default function YouTubeModal({
     }
   }, [currentVideo?.id]);
 
-  // Fetch real related videos from YouTube API route
+  // Prune any video marked unavailable anywhere across StreamFlix
+  useEffect(() => {
+    const handleUnavailable = (e: Event) => {
+      const customEvent = e as CustomEvent<{ videoId: string }>;
+      const badId = customEvent.detail?.videoId;
+      if (badId) {
+        setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
+      }
+    };
+    window.addEventListener("streamflix_unavailable_video", handleUnavailable);
+    return () => {
+      window.removeEventListener("streamflix_unavailable_video", handleUnavailable);
+    };
+  }, []);
+
+  // Fetch real related videos from YouTube API route with embeddability and region validation
   useEffect(() => {
     if (!isOpen || !currentVideo) {
       setRelatedVideos([]);
@@ -112,19 +135,23 @@ export default function YouTubeModal({
       cleanTitleWords.slice(0, 3).join(" ") ||
       "trending movie trailers";
 
+    const excludeList = [currentVideo.id, ...Array.from(getUnavailableVideoIds())];
+
     apiClient
-      .searchYouTube(primaryQuery, undefined, 10)
+      .searchYouTube(primaryQuery, undefined, 10, excludeList)
       .then((res) => {
         if (ignore) return;
-        const filtered = (res.videos || []).filter((v) => v.id !== currentVideo.id);
+        const filtered = filterAvailableVideos(res.videos || []).filter(
+          (v) => v.id !== currentVideo.id
+        );
 
         if (filtered.length === 0) {
           // Secondary fallback search if channel/title query returned only current video
           return apiClient
-            .searchYouTube("trending movie trailers", undefined, 8)
+            .searchYouTube("trending movie trailers", undefined, 8, excludeList)
             .then((fallbackRes) => {
               if (ignore) return;
-              const secondFiltered = (fallbackRes.videos || []).filter(
+              const secondFiltered = filterAvailableVideos(fallbackRes.videos || []).filter(
                 (v) => v.id !== currentVideo.id
               );
               setRelatedVideos(secondFiltered.slice(0, 8));
@@ -147,6 +174,58 @@ export default function YouTubeModal({
       ignore = true;
     };
   }, [isOpen, currentVideo?.id, currentVideo?.channelTitle, currentVideo?.title]);
+
+  // Action: Find another video when current video fails playback or user requests alternative
+  const handleFindAnother = useCallback(async () => {
+    if (!currentVideo) return;
+    markVideoUnavailable(currentVideo.id);
+
+    // 1. Immediately try to pick next available candidate from relatedVideos
+    const candidate = pickReplacementVideo(currentVideo.id, relatedVideos);
+    if (candidate) {
+      setCurrentVideo(candidate);
+      if (onSelectVideo) onSelectVideo(candidate);
+      return;
+    }
+
+    // 2. If no valid candidate in relatedVideos, fetch fresh alternative videos
+    try {
+      const cleanTitleWords = currentVideo.title
+        .replace(/[\(\)\[\]\|:,-]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3 && !/^(official|trailer|teaser|video|hd|4k|movie)$/i.test(w));
+
+      const fallbackQuery =
+        currentVideo.channelTitle ||
+        cleanTitleWords.slice(0, 2).join(" ") ||
+        "trending movie trailers";
+
+      const excludeList = [currentVideo.id, ...Array.from(getUnavailableVideoIds())];
+      const res = await apiClient.searchYouTube(fallbackQuery, undefined, 8, excludeList);
+      const available = filterAvailableVideos(res.videos || []).filter(
+        (v) => v.id !== currentVideo.id
+      );
+
+      if (available.length > 0) {
+        setCurrentVideo(available[0]);
+        setRelatedVideos(available.slice(1));
+        if (onSelectVideo) onSelectVideo(available[0]);
+      } else {
+        const trRes = await apiClient.searchYouTube("trending movie trailers", undefined, 8, excludeList);
+        const trAvailable = filterAvailableVideos(trRes.videos || []).filter(
+          (v) => v.id !== currentVideo.id
+        );
+        if (trAvailable.length > 0) {
+          setCurrentVideo(trAvailable[0]);
+          setRelatedVideos(trAvailable.slice(1));
+          if (onSelectVideo) onSelectVideo(trAvailable[0]);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not find replacement video:", e);
+    }
+  }, [currentVideo, relatedVideos, onSelectVideo]);
+
 
   // Handle Favorites Toggle
   const handleToggleFav = useCallback(() => {
@@ -290,17 +369,17 @@ export default function YouTubeModal({
           </button>
         </div>
 
-        {/* 1. PLAYER SECTION: Official YouTube Embedded Player at the top (Sticky on scroll) */}
+        {/* 1. PLAYER SECTION: StreamFlix YouTube Player with Auto-Error State & Fallback Actions */}
         <div className="sticky top-0 z-40 aspect-video w-full bg-black flex-shrink-0 overflow-hidden shadow-2xl border-b border-[#1b2b3a]">
-          <iframe
-            key={currentVideo.id}
-            src={`https://www.youtube-nocookie.com/embed/${currentVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1`}
-            title={currentVideo.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            className="w-full h-full border-0"
+          <YouTubePlayer
+            video={currentVideo}
+            onFindAnother={handleFindAnother}
+            onUnavailable={(badId) => {
+              setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
+            }}
           />
         </div>
+
 
         {/* Content Body Below YouTube Player */}
         <div className="p-4 sm:p-6 md:p-8 space-y-6 pb-safe">

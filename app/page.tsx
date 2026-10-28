@@ -13,6 +13,8 @@ import MobileBottomNav from "./components/MobileBottomNav";
 import { apiClient } from "@/lib/api-client";
 import { YouTubeVideoItem } from "@/types/youtube";
 import { IVideo } from "@/model/video";
+import { filterAvailableVideos, getUnavailableVideoIds } from "@/lib/unavailable-videos";
+
 
 export default function Home() {
   // Navigation & Filter State
@@ -141,21 +143,52 @@ export default function Home() {
     }
   }, []);
 
+  // Prune any video marked unavailable anywhere across StreamFlix
+  useEffect(() => {
+    const handleUnavailable = (e: Event) => {
+      const customEvent = e as CustomEvent<{ videoId: string }>;
+      const badId = customEvent.detail?.videoId;
+      if (!badId) return;
+
+      setTrendingVideos((prev) => prev.filter((v) => v.id !== badId));
+      setRecommendedVideos((prev) => prev.filter((v) => v.id !== badId));
+      setFeaturedVideos((prev) => prev.filter((v) => v.id !== badId));
+      setEntertainmentVideos((prev) => prev.filter((v) => v.id !== badId));
+      setGamingVideos((prev) => prev.filter((v) => v.id !== badId));
+      setTechVideos((prev) => prev.filter((v) => v.id !== badId));
+      setMusicVideos((prev) => prev.filter((v) => v.id !== badId));
+      setSearchResults((prev) => prev.filter((v) => v.id !== badId));
+      setCategoryResultVideos((prev) => prev.filter((v) => v.id !== badId));
+    };
+
+    window.addEventListener("streamflix_unavailable_video", handleUnavailable);
+    return () => {
+      window.removeEventListener("streamflix_unavailable_video", handleUnavailable);
+    };
+  }, []);
+
   // Initial Data Fetch for Dashboard Rows & Featured Banner
   useEffect(() => {
     let ignore = false;
 
     async function loadDashboardCatalog() {
       try {
-        // Fetch Primary Trending & Recommended
-        const trendingRes = await apiClient.searchYouTube("trending movie trailers 2024", undefined, 12);
+        const unavailable = Array.from(getUnavailableVideoIds());
+
+        // Fetch Primary Trending & Recommended with India & embeddable filters
+        const trendingRes = await apiClient.searchYouTube(
+          "trending movie trailers 2024",
+          undefined,
+          12,
+          unavailable
+        );
         if (ignore) return;
 
         if (trendingRes.isKeyMissing) {
           setIsKeyMissing(true);
         }
 
-        const tVideos = trendingRes.videos || [];
+        const tVideos = filterAvailableVideos(trendingRes.videos || []);
         setTrendingVideos(tVideos);
         if (tVideos.length > 0) {
           const heroSpotlights = tVideos.slice(0, 5);
@@ -165,27 +198,27 @@ export default function Home() {
           setRecommendedVideos(tVideos.slice(1));
         }
 
-        // Fetch Secondary Rows (Entertainment, Gaming, Tech, Music) in parallel
+        // Fetch Secondary Rows (Entertainment, Gaming, Tech, Music) in parallel with excludeList
         const [entRes, gameRes, techRes, musicRes] = await Promise.allSettled([
-          apiClient.searchYouTube("official cinema blockbusters and trailers", undefined, 10),
-          apiClient.searchYouTube("grand theft auto elden ring black myth gaming trailers", undefined, 10),
-          apiClient.searchYouTube("apple vision pro spacex starship atlas technology", undefined, 10),
-          apiClient.searchYouTube("top music videos concerts live official", undefined, 10),
+          apiClient.searchYouTube("official cinema blockbusters and trailers", undefined, 10, unavailable),
+          apiClient.searchYouTube("grand theft auto elden ring black myth gaming trailers", undefined, 10, unavailable),
+          apiClient.searchYouTube("apple vision pro spacex starship atlas technology", undefined, 10, unavailable),
+          apiClient.searchYouTube("top music videos concerts live official", undefined, 10, unavailable),
         ]);
 
         if (ignore) return;
 
         if (entRes.status === "fulfilled" && entRes.value?.videos) {
-          setEntertainmentVideos(entRes.value.videos);
+          setEntertainmentVideos(filterAvailableVideos(entRes.value.videos));
         }
         if (gameRes.status === "fulfilled" && gameRes.value?.videos) {
-          setGamingVideos(gameRes.value.videos);
+          setGamingVideos(filterAvailableVideos(gameRes.value.videos));
         }
         if (techRes.status === "fulfilled" && techRes.value?.videos) {
-          setTechVideos(techRes.value.videos);
+          setTechVideos(filterAvailableVideos(techRes.value.videos));
         }
         if (musicRes.status === "fulfilled" && musicRes.value?.videos) {
-          setMusicVideos(musicRes.value.videos);
+          setMusicVideos(filterAvailableVideos(musicRes.value.videos));
         }
       } catch (err: unknown) {
         if (!ignore) {
@@ -218,11 +251,14 @@ export default function Home() {
       }
       setApiError(null);
 
-      const res = await apiClient.searchYouTube(query, pageToken, 18);
+      const unavailable = Array.from(getUnavailableVideoIds());
+      const res = await apiClient.searchYouTube(query, pageToken, 18, unavailable);
+      const validVideos = filterAvailableVideos(res.videos || []);
+
       if (append) {
-        setSearchResults((prev) => [...prev, ...(res.videos || [])]);
+        setSearchResults((prev) => [...prev, ...validVideos]);
       } else {
-        setSearchResults(res.videos || []);
+        setSearchResults(validVideos);
       }
       setSearchNextPage(res.nextPageToken);
       if (res.isKeyMissing) {
@@ -273,8 +309,9 @@ export default function Home() {
     startTransition(async () => {
       try {
         const queryTerm = `${cat} official trailers and popular videos`;
-        const res = await apiClient.searchYouTube(queryTerm, undefined, 15);
-        const catVideos = res.videos || [];
+        const unavailable = Array.from(getUnavailableVideoIds());
+        const res = await apiClient.searchYouTube(queryTerm, undefined, 15, unavailable);
+        const catVideos = filterAvailableVideos(res.videos || []);
         setCategoryResultVideos(catVideos);
         if (catVideos.length > 0) {
           const heroSpotlights = catVideos.slice(0, 5);
@@ -289,6 +326,7 @@ export default function Home() {
       }
     });
   };
+
 
   // Handle Content Filter Dropdown Change
   const handleContentFilterChange = (filter: string) => {

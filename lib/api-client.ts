@@ -43,16 +43,30 @@ class ApiClient {
     });
   }
 
-  async searchYouTube(query: string, pageToken?: string, maxResults?: number) {
+  async searchYouTube(
+    query: string,
+    pageToken?: string,
+    maxResults?: number,
+    excludeIds?: string[]
+  ) {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (pageToken) params.set("pageToken", pageToken);
     if (maxResults) params.set("maxResults", String(maxResults));
+    if (excludeIds && excludeIds.length > 0) {
+      params.set("excludeIds", excludeIds.join(","));
+    }
     const queryString = params.toString();
     return this.fetch<YouTubeSearchApiResponse>(
       `/youtube${queryString ? `?${queryString}` : ""}`
     );
   }
+
+  async getVideoById(id: string) {
+    const params = new URLSearchParams({ id });
+    return this.fetch<YouTubeSearchApiResponse>(`/youtube?${params.toString()}`);
+  }
 }
+
 
 export const apiClient = new ApiClient();

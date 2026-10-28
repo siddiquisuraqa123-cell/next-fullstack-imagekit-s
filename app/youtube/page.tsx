@@ -6,6 +6,14 @@ import Footer from "../components/Footer";
 import MobileBottomNav from "../components/MobileBottomNav";
 import { apiClient } from "@/lib/api-client";
 import { YouTubeVideoItem } from "@/types/youtube";
+import YouTubePlayer from "../components/YouTubePlayer";
+import {
+  filterAvailableVideos,
+  markVideoUnavailable,
+  getUnavailableVideoIds,
+  pickReplacementVideo,
+} from "@/lib/unavailable-videos";
+
 
 // Curated search tags for quick browsing
 const POPULAR_TOPICS = [
@@ -100,7 +108,23 @@ export default function YouTubePage() {
     });
   }, []);
 
-  // Primary fetch handler for browse grid
+  // Global event listener to prune any video marked unavailable anywhere across StreamFlix
+  useEffect(() => {
+    const handleUnavailable = (e: Event) => {
+      const customEvent = e as CustomEvent<{ videoId: string }>;
+      const badId = customEvent.detail?.videoId;
+      if (badId) {
+        setVideos((prev) => prev.filter((v) => v.id !== badId));
+        setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
+      }
+    };
+    window.addEventListener("streamflix_unavailable_video", handleUnavailable);
+    return () => {
+      window.removeEventListener("streamflix_unavailable_video", handleUnavailable);
+    };
+  }, []);
+
+  // Primary fetch handler for browse grid with embeddable and region filtering
   const fetchVideos = useCallback(
     async (searchTerm: string, token?: string, append = false) => {
       try {
@@ -112,12 +136,14 @@ export default function YouTubePage() {
         setError(null);
         setIsKeyMissing(false);
 
-        const res = await apiClient.searchYouTube(searchTerm, token);
+        const excludeList = Array.from(getUnavailableVideoIds());
+        const res = await apiClient.searchYouTube(searchTerm, token, undefined, excludeList);
+        const validVideos = filterAvailableVideos(res.videos || []);
 
         if (append) {
-          setVideos((prev) => [...prev, ...(res.videos || [])]);
+          setVideos((prev) => [...prev, ...validVideos]);
         } else {
-          setVideos(res.videos || []);
+          setVideos(validVideos);
         }
         setNextPageToken(res.nextPageToken);
         if (res.isKeyMissing) {
@@ -152,11 +178,13 @@ export default function YouTubePage() {
   // Initial load
   useEffect(() => {
     let ignore = false;
+    const excludeList = Array.from(getUnavailableVideoIds());
     apiClient
-      .searchYouTube("trending movie trailers")
+      .searchYouTube("trending movie trailers", undefined, undefined, excludeList)
       .then((res) => {
         if (!ignore) {
-          setVideos(res.videos || []);
+          const valid = filterAvailableVideos(res.videos || []);
+          setVideos(valid);
           setNextPageToken(res.nextPageToken);
           if (res.isKeyMissing) {
             setIsKeyMissing(true);
@@ -180,31 +208,57 @@ export default function YouTubePage() {
     };
   }, []);
 
-  // Deep linking: check ?v= query parameter on mount
+  // Deep linking: check ?v= query parameter on mount and verify metadata
   useEffect(() => {
+    let isCurrent = true;
     try {
       const params = new URLSearchParams(window.location.search);
       const vId = params.get("v");
       if (vId) {
-        // If video is found in already loaded videos, use it; otherwise create standard video stub
+        // If video is found in already loaded videos, use it
         const match = videos.find((v) => v.id === vId);
         if (match) {
           setSelectedVideo(match);
         } else {
-          setSelectedVideo({
-            id: vId,
-            title: "YouTube Video",
-            description: "",
-            thumbnailUrl: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
-            channelTitle: "YouTube Creator",
-            publishedAt: new Date().toISOString(),
-          });
+          // Direct API lookup to fetch true title and verify embeddability status
+          apiClient
+            .getVideoById(vId)
+            .then((res) => {
+              if (!isCurrent) return;
+              if (res.videos && res.videos.length > 0) {
+                setSelectedVideo(res.videos[0]);
+              } else {
+                setSelectedVideo({
+                  id: vId,
+                  title: "YouTube Video",
+                  description: "",
+                  thumbnailUrl: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
+                  channelTitle: "YouTube Creator",
+                  publishedAt: new Date().toISOString(),
+                });
+              }
+            })
+            .catch(() => {
+              if (!isCurrent) return;
+              setSelectedVideo({
+                id: vId,
+                title: "YouTube Video",
+                description: "",
+                thumbnailUrl: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
+                channelTitle: "YouTube Creator",
+                publishedAt: new Date().toISOString(),
+              });
+            });
         }
       }
     } catch {
       // ignore
     }
+    return () => {
+      isCurrent = false;
+    };
   }, [videos]);
+
 
   // Sync ?v= query param with active selectedVideo
   useEffect(() => {
@@ -267,18 +321,22 @@ export default function YouTubePage() {
       cleanTitleWords.slice(0, 3).join(" ") ||
       "trending movie trailers";
 
+    const excludeList = [selectedVideo.id, ...Array.from(getUnavailableVideoIds())];
+
     apiClient
-      .searchYouTube(primaryQuery, undefined, 12)
+      .searchYouTube(primaryQuery, undefined, 12, excludeList)
       .then((res) => {
         if (ignore) return;
-        const filtered = (res.videos || []).filter((v) => v.id !== selectedVideo.id);
+        const filtered = filterAvailableVideos(res.videos || []).filter(
+          (v) => v.id !== selectedVideo.id
+        );
         if (filtered.length === 0) {
           // Secondary fallback search
           return apiClient
-            .searchYouTube("trending movie trailers", undefined, 8)
+            .searchYouTube("trending movie trailers", undefined, 8, excludeList)
             .then((res2) => {
               if (ignore) return;
-              const secondFiltered = (res2.videos || []).filter(
+              const secondFiltered = filterAvailableVideos(res2.videos || []).filter(
                 (v) => v.id !== selectedVideo.id
               );
               setRelatedVideos(secondFiltered.slice(0, 8));
@@ -291,7 +349,7 @@ export default function YouTubePage() {
       })
       .catch(() => {
         if (ignore) return;
-        const fallback = videos.filter((v) => v.id !== selectedVideo.id).slice(0, 8);
+        const fallback = filterAvailableVideos(videos).filter((v) => v.id !== selectedVideo.id).slice(0, 8);
         setRelatedVideos(fallback);
         setLoadingRelated(false);
       });
@@ -300,6 +358,60 @@ export default function YouTubePage() {
       ignore = true;
     };
   }, [selectedVideo?.id, selectedVideo?.channelTitle, selectedVideo?.title, videos]);
+
+  // Action: Find another video when current video is unavailable or user requests alternative
+  const handleFindAnother = useCallback(async () => {
+    if (!selectedVideo) return;
+    markVideoUnavailable(selectedVideo.id);
+
+    // 1. Check for valid candidate in relatedVideos or loaded videos
+    const candidate =
+      pickReplacementVideo(selectedVideo.id, relatedVideos) ||
+      pickReplacementVideo(selectedVideo.id, videos);
+
+    if (candidate) {
+      setSelectedVideo(candidate);
+      return;
+    }
+
+    // 2. Fetch fresh alternative matching title, topic, or query
+    try {
+      const cleanTitleWords = selectedVideo.title
+        .replace(/[\(\)\[\]\|:,-]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 3 && !/^(official|trailer|teaser|video|hd|4k|movie)$/i.test(w));
+
+      const fallbackQuery =
+        selectedVideo.channelTitle ||
+        cleanTitleWords.slice(0, 2).join(" ") ||
+        activeTopic ||
+        query ||
+        "trending movie trailers";
+
+      const excludeList = [selectedVideo.id, ...Array.from(getUnavailableVideoIds())];
+      const res = await apiClient.searchYouTube(fallbackQuery, undefined, 8, excludeList);
+      const available = filterAvailableVideos(res.videos || []).filter(
+        (v) => v.id !== selectedVideo.id
+      );
+
+      if (available.length > 0) {
+        setSelectedVideo(available[0]);
+        setRelatedVideos(available.slice(1));
+      } else {
+        const trRes = await apiClient.searchYouTube("trending movie trailers", undefined, 8, excludeList);
+        const trAvailable = filterAvailableVideos(trRes.videos || []).filter(
+          (v) => v.id !== selectedVideo.id
+        );
+        if (trAvailable.length > 0) {
+          setSelectedVideo(trAvailable[0]);
+          setRelatedVideos(trAvailable.slice(1));
+        }
+      }
+    } catch (e) {
+      console.warn("Could not find replacement video:", e);
+    }
+  }, [selectedVideo, relatedVideos, videos, activeTopic, query]);
+
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -465,15 +577,17 @@ export default function YouTubePage() {
                       : "w-full rounded-xl sm:rounded-2xl border border-[#1b2b3a]"
                   }`}
                 >
-                  <iframe
-                    key={selectedVideo.id}
-                    src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1`}
-                    title={selectedVideo.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    className="w-full h-full border-0"
+                  <YouTubePlayer
+                    video={selectedVideo}
+                    isSticky={isSticky}
+                    onFindAnother={handleFindAnother}
+                    onUnavailable={(badId) => {
+                      setVideos((prev) => prev.filter((v) => v.id !== badId));
+                      setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
+                    }}
                   />
                 </div>
+
 
                 {/* Compact Sticky Details & Quick Actions Bar */}
                 {isSticky && (

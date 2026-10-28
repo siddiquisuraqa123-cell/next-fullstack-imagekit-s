@@ -113,10 +113,10 @@ const PREVIEW_VIDEOS: YouTubeVideoItem[] = [
   },
   // Technology
   {
-    id: "Vb9nBcxQh_g",
-    title: "Introducing Apple Vision Pro - Spatial Computing",
+    id: "Btf4mN37OsU",
+    title: "Apple Vision Pro - Reveal Trailer",
     description: "The era of spatial computing is here. Apple Vision Pro seamlessly blends digital content with your physical space.",
-    thumbnailUrl: "https://img.youtube.com/vi/Vb9nBcxQh_g/hqdefault.jpg",
+    thumbnailUrl: "https://img.youtube.com/vi/Btf4mN37OsU/hqdefault.jpg",
     channelTitle: "Apple",
     publishedAt: "2023-06-05T00:00:00Z",
   },
@@ -129,12 +129,12 @@ const PREVIEW_VIDEOS: YouTubeVideoItem[] = [
     publishedAt: "2023-04-20T00:00:00Z",
   },
   {
-    id: "fn3K35Ut64o",
-    title: "Atlas | Boston Dynamics - The Next Generation",
-    description: "A new fully electric Atlas humanoid robot designed for real-world applications.",
-    thumbnailUrl: "https://img.youtube.com/vi/fn3K35Ut64o/hqdefault.jpg",
+    id: "tF4DML7FIWk",
+    title: "Atlas | Partners in Parkour - Boston Dynamics",
+    description: "Parkour is the ideal sandbox for the Atlas team at Boston Dynamics to experiment with new behaviors.",
+    thumbnailUrl: "https://img.youtube.com/vi/tF4DML7FIWk/hqdefault.jpg",
     channelTitle: "Boston Dynamics",
-    publishedAt: "2024-04-17T00:00:00Z",
+    publishedAt: "2021-08-17T00:00:00Z",
   },
   // Music & Concerts
   {
@@ -163,23 +163,130 @@ const PREVIEW_VIDEOS: YouTubeVideoItem[] = [
   },
 ];
 
+interface YouTubeRawSnippet {
+  title?: string;
+  description?: string;
+  channelTitle?: string;
+  channelId?: string;
+  publishedAt?: string;
+  thumbnails?: {
+    maxres?: { url: string };
+    high?: { url: string };
+    medium?: { url: string };
+    default?: { url: string };
+  };
+}
+
+interface YouTubeDetailItem {
+  id: string;
+  snippet?: YouTubeRawSnippet;
+  contentDetails?: {
+    duration?: string;
+    regionRestriction?: {
+      allowed?: string[];
+      blocked?: string[];
+    };
+    contentRating?: {
+      ytRating?: string;
+    };
+  };
+  status?: {
+    uploadStatus?: string;
+    privacyStatus?: string;
+    embeddable?: boolean;
+  };
+}
+
+function extractThumbnailUrl(snippet?: YouTubeRawSnippet, videoId?: string): string {
+  const thumbs = snippet?.thumbnails || {};
+  return (
+    thumbs.maxres?.url ||
+    thumbs.high?.url ||
+    thumbs.medium?.url ||
+    thumbs.default?.url ||
+    (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : "")
+  );
+}
+
+function isDetailPlayableInRegion(detail: YouTubeDetailItem, regionCode: string): boolean {
+  // 1. Must explicitly have embeddable !== false
+  if (detail.status?.embeddable === false) {
+    return false;
+  }
+
+  // 2. Must be processed and public
+  if (detail.status?.uploadStatus && detail.status.uploadStatus !== "processed") {
+    return false;
+  }
+  if (detail.status?.privacyStatus && detail.status.privacyStatus !== "public") {
+    return false;
+  }
+
+  // 3. Must not be age-restricted (YouTube blocks embedded playback for age-restricted videos)
+  if (detail.contentDetails?.contentRating?.ytRating === "ytAgeRestricted") {
+    return false;
+  }
+
+  // 4. Region restriction verification
+  const rr = detail.contentDetails?.regionRestriction;
+  if (rr) {
+    const regUpper = regionCode.toUpperCase();
+    if (Array.isArray(rr.blocked)) {
+      const blockedList = rr.blocked.map((r) => r.toUpperCase());
+      if (blockedList.includes(regUpper)) {
+        return false;
+      }
+    }
+    if (Array.isArray(rr.allowed) && rr.allowed.length > 0) {
+      const allowedList = rr.allowed.map((r) => r.toUpperCase());
+      if (!allowedList.includes(regUpper)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const apiKey = process.env.YOUTUBE_API_KEY;
     const searchParams = request.nextUrl.searchParams;
+    const singleId = (searchParams.get("id") || searchParams.get("videoId") || "").trim();
     const query = (searchParams.get("q") || "").trim() || "trending movie trailers";
     const pageToken = (searchParams.get("pageToken") || "").trim();
+    const regionCode = (searchParams.get("regionCode") || "IN").trim().toUpperCase();
+    const relevanceLanguage = (searchParams.get("relevanceLanguage") || "en").trim();
+    const excludeIdsParam = searchParams.get("excludeIds") || "";
+    const excludeIds = new Set(
+      excludeIdsParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+
     const maxResultsParam = parseInt(searchParams.get("maxResults") || "18", 10);
     const maxResults = Math.min(Math.max(isNaN(maxResultsParam) ? 18 : maxResultsParam, 1), 25);
 
     // If API key is not configured, return preview trailers so the UI and embedded player work immediately
     if (!apiKey) {
+      if (singleId) {
+        const previewMatch = PREVIEW_VIDEOS.find((v) => v.id === singleId);
+        return NextResponse.json({
+          videos: previewMatch ? [previewMatch] : [],
+          query: "",
+          isKeyMissing: true,
+          regionCode,
+        } satisfies YouTubeSearchApiResponse);
+      }
+
       const qLower = query.toLowerCase();
       let filtered = PREVIEW_VIDEOS.filter(
         (v) =>
-          v.title.toLowerCase().includes(qLower) ||
-          v.channelTitle.toLowerCase().includes(qLower) ||
-          v.description.toLowerCase().includes(qLower)
+          !excludeIds.has(v.id) &&
+          (v.title.toLowerCase().includes(qLower) ||
+            v.channelTitle.toLowerCase().includes(qLower) ||
+            v.description.toLowerCase().includes(qLower))
       );
 
       // If category keyword matches Gaming, Tech, Music, etc.
@@ -187,37 +294,100 @@ export async function GET(request: NextRequest) {
         if (qLower.includes("gaming") || qLower.includes("game")) {
           filtered = PREVIEW_VIDEOS.filter((v) => ["QdBZY2fkU-0", "EE-4GvjKcfs", "4NRXx6U8ABQ"].includes(v.id));
         } else if (qLower.includes("tech") || qLower.includes("apple") || qLower.includes("space")) {
-          filtered = PREVIEW_VIDEOS.filter((v) => ["Vb9nBcxQh_g", "29ECwExc-_M", "fn3K35Ut64o"].includes(v.id));
+          filtered = PREVIEW_VIDEOS.filter((v) => ["Btf4mN37OsU", "29ECwExc-_M", "tF4DML7FIWk"].includes(v.id));
         } else if (qLower.includes("music") || qLower.includes("song") || qLower.includes("concert")) {
           filtered = PREVIEW_VIDEOS.filter((v) => ["fJ9rUzIMcZQ", "JGwWNGJdvx8", "OPf0YbXqDm0"].includes(v.id));
         }
       }
 
+      const safeFallback = (filtered.length > 0 ? filtered : PREVIEW_VIDEOS).filter((v) => !excludeIds.has(v.id));
+
       return NextResponse.json({
         error:
           "YouTube API key is not configured in .env.local or Vercel. Showing preview trailers so you can test the embedded player right now. Set YOUTUBE_API_KEY to enable live searches.",
         isKeyMissing: true,
-        videos: (filtered.length > 0 ? filtered : PREVIEW_VIDEOS).slice(0, maxResults),
+        videos: safeFallback.slice(0, maxResults),
         query,
+        regionCode,
       } satisfies YouTubeSearchApiResponse);
     }
 
-    // YouTube Data API v3 search endpoint
-    // videoEmbeddable=true ensures returned videos can be played via official YouTube iframe player
-    const url = new URL("https://www.googleapis.com/youtube/v3/search");
-    url.searchParams.set("part", "snippet");
-    url.searchParams.set("type", "video");
-    url.searchParams.set("videoEmbeddable", "true");
-    url.searchParams.set("maxResults", String(maxResults));
-    url.searchParams.set("q", query);
-    url.searchParams.set("key", apiKey);
+    // Direct Single Video Lookup by ID (used for deep-linking ?v=id and direct verification)
+    if (singleId) {
+      const singleUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+      singleUrl.searchParams.set("part", "snippet,contentDetails,status");
+      singleUrl.searchParams.set("id", singleId);
+      singleUrl.searchParams.set("key", apiKey);
 
-    if (pageToken) {
-      url.searchParams.set("pageToken", pageToken);
+      const singleRes = await fetch(singleUrl.toString(), {
+        next: { revalidate: 120 },
+        headers: { Accept: "application/json" },
+      });
+
+      const singleData = await singleRes.json();
+      if (!singleRes.ok) {
+        return NextResponse.json(
+          {
+            error: singleData?.error?.message || "Failed to fetch video details.",
+            videos: [],
+            query: "",
+            regionCode,
+          } satisfies YouTubeSearchApiResponse,
+          { status: singleRes.status }
+        );
+      }
+
+      const item: YouTubeDetailItem | undefined = singleData.items?.[0];
+      if (!item) {
+        return NextResponse.json({
+          videos: [],
+          query: "",
+          regionCode,
+        } satisfies YouTubeSearchApiResponse);
+      }
+
+      const isPlayable = isDetailPlayableInRegion(item, regionCode);
+      const snippet = item.snippet;
+      const videoItem: YouTubeVideoItem = {
+        id: item.id,
+        title: decodeHtmlEntities(snippet?.title || "YouTube Video"),
+        description: decodeHtmlEntities(snippet?.description || ""),
+        thumbnailUrl: extractThumbnailUrl(snippet, item.id),
+        channelTitle: decodeHtmlEntities(snippet?.channelTitle || "YouTube Creator"),
+        channelId: snippet?.channelId,
+        publishedAt: snippet?.publishedAt || new Date().toISOString(),
+        isEmbeddable: isPlayable,
+      };
+
+      return NextResponse.json({
+        videos: [videoItem],
+        query: "",
+        regionCode,
+      } satisfies YouTubeSearchApiResponse);
     }
 
-    const ytResponse = await fetch(url.toString(), {
-      // Revalidate cache for 60 seconds to optimize performance while staying fresh
+    // YouTube Data API v3 search endpoint with strict embeddable & syndicated filters
+    const searchUrl = new URL("https://www.googleapis.com/youtube/v3/search");
+    searchUrl.searchParams.set("part", "snippet");
+    searchUrl.searchParams.set("type", "video");
+    searchUrl.searchParams.set("videoEmbeddable", "true");
+    searchUrl.searchParams.set("videoSyndicated", "true");
+    searchUrl.searchParams.set("regionCode", regionCode);
+    if (relevanceLanguage) {
+      searchUrl.searchParams.set("relevanceLanguage", relevanceLanguage);
+    }
+    // Fetch a buffer of items so that after filtering out region/metadata restrictions, maxResults is met
+    const fetchLimit = Math.min(maxResults + 10, 50);
+    searchUrl.searchParams.set("maxResults", String(fetchLimit));
+    searchUrl.searchParams.set("q", query);
+    searchUrl.searchParams.set("key", apiKey);
+
+    if (pageToken) {
+      searchUrl.searchParams.set("pageToken", pageToken);
+    }
+
+    const ytResponse = await fetch(searchUrl.toString(), {
+      // Revalidate search results for 60 seconds
       next: { revalidate: 60 },
       headers: {
         Accept: "application/json",
@@ -245,56 +415,85 @@ export async function GET(request: NextRequest) {
           error: friendlyMessage,
           videos: [],
           query,
+          regionCode,
         } satisfies YouTubeSearchApiResponse,
         { status: ytResponse.status }
       );
     }
 
-    // Map YouTube search results into a clean, safe format (never leaking any sensitive data)
-    const items = Array.isArray(data.items) ? data.items : [];
-    const videos: YouTubeVideoItem[] = items
-      .filter((item: { id?: { videoId?: string } }) => Boolean(item?.id?.videoId))
+    const rawItems = Array.isArray(data.items) ? data.items : [];
+    const candidateItems = rawItems.filter(
+      (item: { id?: { videoId?: string } }) =>
+        Boolean(item?.id?.videoId) && !excludeIds.has(item.id!.videoId!)
+    );
+
+    const candidateIds = candidateItems
+      .map((item: { id: { videoId: string } }) => item.id.videoId)
+      .filter(Boolean);
+
+    // Validate video metadata, status, embeddability, and region restriction using videos.list batch call
+    // Note: videos.list costs only 1 quota unit for the entire batch of up to 50 video IDs.
+    const validIdSet = new Set<string>();
+
+    if (candidateIds.length > 0) {
+      try {
+        const validateUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+        validateUrl.searchParams.set("part", "contentDetails,status");
+        validateUrl.searchParams.set("id", candidateIds.join(","));
+        validateUrl.searchParams.set("key", apiKey);
+
+        const validateRes = await fetch(validateUrl.toString(), {
+          next: { revalidate: 180 },
+          headers: { Accept: "application/json" },
+        });
+
+        if (validateRes.ok) {
+          const validateData = await validateRes.json();
+          const detailItems: YouTubeDetailItem[] = Array.isArray(validateData.items)
+            ? validateData.items
+            : [];
+
+          for (const detail of detailItems) {
+            if (detail?.id && isDetailPlayableInRegion(detail, regionCode)) {
+              validIdSet.add(detail.id);
+            }
+          }
+        } else {
+          // If videos.list validation fails unexpectedly, keep candidate IDs as a graceful fallback
+          candidateIds.forEach((id: string) => validIdSet.add(id));
+        }
+      } catch (valErr) {
+        console.warn("[YouTube videos.list Error] Falling back to search candidates:", valErr);
+        candidateIds.forEach((id: string) => validIdSet.add(id));
+      }
+    }
+
+    // Filter search results to only validated playable videos
+    const videos: YouTubeVideoItem[] = candidateItems
+      .filter((item: { id: { videoId: string } }) => validIdSet.has(item.id.videoId))
       .map((item: {
         id: { videoId: string };
-        snippet: {
-          title?: string;
-          description?: string;
-          channelTitle?: string;
-          channelId?: string;
-          publishedAt?: string;
-          thumbnails?: {
-            maxres?: { url: string };
-            high?: { url: string };
-            medium?: { url: string };
-            default?: { url: string };
-          };
-        };
+        snippet: YouTubeRawSnippet;
       }) => {
         const snippet = item.snippet || {};
-        const thumbs = snippet.thumbnails || {};
-        const thumbnailUrl =
-          thumbs.maxres?.url ||
-          thumbs.high?.url ||
-          thumbs.medium?.url ||
-          thumbs.default?.url ||
-          `https://img.youtube.com/vi/${item.id.videoId}/hqdefault.jpg`;
-
         return {
           id: item.id.videoId,
           title: decodeHtmlEntities(snippet.title || "Untitled Video"),
           description: decodeHtmlEntities(snippet.description || ""),
-          thumbnailUrl,
+          thumbnailUrl: extractThumbnailUrl(snippet, item.id.videoId),
           channelTitle: decodeHtmlEntities(snippet.channelTitle || "YouTube Creator"),
           channelId: snippet.channelId,
           publishedAt: snippet.publishedAt || new Date().toISOString(),
+          isEmbeddable: true,
         };
       });
 
     return NextResponse.json({
-      videos,
+      videos: videos.slice(0, maxResults),
       nextPageToken: data.nextPageToken || undefined,
       totalResults: data.pageInfo?.totalResults,
       query,
+      regionCode,
     } satisfies YouTubeSearchApiResponse);
   } catch (err: unknown) {
     const errorMsg =
@@ -310,3 +509,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
