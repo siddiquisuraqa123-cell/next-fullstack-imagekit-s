@@ -1,0 +1,19 @@
+[1mdiff --git a/.env.example b/.env.example[m
+[1mindex a2f2d41..67b0375 100644[m
+[1m--- a/.env.example[m
+[1m+++ b/.env.example[m
+[36m@@ -12,6 +12,13 @@[m [mIMAGEKIT_PRIVATE_KEY=your_imagekit_private_key[m
+ NEXT_PUBLIC_URL_ENDPOINT=https://ik.imagekit.io/your_endpoint[m
+ NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/your_endpoint[m
+ [m
+[31m-# YouTube Data API v3 (Server-side search)[m
+[32m+[m[32m# YouTube Data API v3 (Server-side search & comments)[m
+ YOUTUBE_API_KEY=your_youtube_api_key_here[m
+ [m
+[32m+[m[32m# Google OAuth 2.0 Credentials (Required for posting/replying to YouTube comments)[m
+[32m+[m[32m# Obtain from Google Cloud Console -> APIs & Services -> Credentials[m
+[32m+[m[32m# Redirect URI: http://localhost:3000/api/auth/callback/google[m
+[32m+[m[32m# Required Scope: https://www.googleapis.com/auth/youtube.force-ssl[m
+[32m+[m[32mGOOGLE_CLIENT_ID=your_google_client_id_here[m
+[32m+[m[32mGOOGLE_CLIENT_SECRET=your_google_client_secret_here[m
+[32m+[m
