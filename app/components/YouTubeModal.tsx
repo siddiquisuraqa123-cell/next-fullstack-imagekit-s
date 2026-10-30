@@ -9,7 +9,9 @@ import {
   markVideoUnavailable,
   getUnavailableVideoIds,
   pickReplacementVideo,
+  isUnavailable,
 } from "@/lib/unavailable-videos";
+import { isPlayedVideo, addPlayedVideoId } from "@/lib/playback-history";
 
 
 export interface YouTubeModalProps {
@@ -31,6 +33,8 @@ export default function YouTubeModal({
 }: YouTubeModalProps) {
   // Active playing video (defaults to video prop, updates cleanly on recommendation click)
   const [currentVideo, setCurrentVideo] = useState<YouTubeVideoItem | null>(video);
+  const [modalHistory, setModalHistory] = useState<YouTubeVideoItem[]>([]);
+  const [autoplayNext, setAutoplayNext] = useState<boolean>(true);
 
   const [copied, setCopied] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
@@ -44,9 +48,65 @@ export default function YouTubeModal({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Load autoplay setting from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("streamflix_autoplay_next");
+      if (saved !== null) {
+        setAutoplayNext(JSON.parse(saved));
+      }
+    } catch {}
+  }, []);
+
+  const handleModalNext = useCallback(() => {
+    if (!currentVideo) return;
+    setModalHistory((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].id === currentVideo.id) {
+        return prev;
+      }
+      return [...prev, currentVideo];
+    });
+
+    // Pick unplayed candidate first, to avoid repeating same videos
+    let nextCandidate = relatedVideos.find(
+      (v) => v.id !== currentVideo.id && !isUnavailable(v.id) && !isPlayedVideo(v.id)
+    );
+    if (!nextCandidate) {
+      nextCandidate = relatedVideos.find(
+        (v) => v.id !== currentVideo.id && !isUnavailable(v.id)
+      );
+    }
+
+    if (nextCandidate) {
+      addPlayedVideoId(nextCandidate.id);
+      setCurrentVideo(nextCandidate);
+      if (onSelectVideo) onSelectVideo(nextCandidate);
+    }
+  }, [currentVideo, relatedVideos, onSelectVideo]);
+
+  const handleModalPrevious = useCallback(() => {
+    if (modalHistory.length === 0) return;
+    const nextHistory = [...modalHistory];
+    const prev = nextHistory.pop();
+    if (prev) {
+      setModalHistory(nextHistory);
+      setCurrentVideo(prev);
+      if (onSelectVideo) onSelectVideo(prev);
+    }
+  }, [modalHistory, onSelectVideo]);
+
+  const handleModalEnded = useCallback(() => {
+    if (autoplayNext) {
+      handleModalNext();
+    }
+  }, [autoplayNext, handleModalNext]);
+
   // Synchronize internal currentVideo when video prop changes from parent
   useEffect(() => {
     setCurrentVideo(video);
+    if (video?.id) {
+      addPlayedVideoId(video.id);
+    }
   }, [video]);
 
   // Sync favorites state from prop or localStorage
@@ -371,13 +431,21 @@ export default function YouTubeModal({
 
         {/* 1. PLAYER SECTION: StreamFlix YouTube Player with Auto-Error State & Fallback Actions */}
         <div className="sticky top-0 z-40 aspect-video w-full bg-black flex-shrink-0 overflow-hidden shadow-2xl border-b border-[#1b2b3a]">
-          <YouTubePlayer
-            video={currentVideo}
-            onFindAnother={handleFindAnother}
-            onUnavailable={(badId) => {
-              setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
-            }}
-          />
+          {currentVideo && (
+            <YouTubePlayer
+              video={currentVideo}
+              onFindAnother={handleFindAnother}
+              onUnavailable={(badId) => {
+                setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
+              }}
+              hasPrevious={modalHistory.length > 0}
+              hasNext={relatedVideos.length > 0}
+              onPrevious={handleModalPrevious}
+              onNext={handleModalNext}
+              onEnded={handleModalEnded}
+              autoplayNext={autoplayNext}
+            />
+          )}
         </div>
 
 

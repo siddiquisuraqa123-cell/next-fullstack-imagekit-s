@@ -2,7 +2,7 @@
 
 import { YouTubeVideoItem } from "@/types/youtube";
 
-const STORAGE_KEY = "streamflix_unavailable_videos";
+const STORAGE_KEY = "streamflix_unavailable_videos_v2";
 
 // In-memory set for high-performance synchronous lookups
 const inMemoryUnavailableIds = new Set<string>();
@@ -11,6 +11,9 @@ let isInitialized = false;
 function initFromStorage() {
   if (isInitialized || typeof window === "undefined") return;
   try {
+    // Clear legacy corrupted cache from old false-positive bug
+    sessionStorage.removeItem("streamflix_unavailable_videos");
+
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed: string[] = JSON.parse(raw);

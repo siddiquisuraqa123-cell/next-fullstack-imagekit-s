@@ -6,13 +6,22 @@ import Footer from "../components/Footer";
 import MobileBottomNav from "../components/MobileBottomNav";
 import { apiClient } from "@/lib/api-client";
 import { YouTubeVideoItem } from "@/types/youtube";
-import YouTubePlayer from "../components/YouTubePlayer";
+import YouTubePlayer, { YouTubePlayerRef } from "../components/YouTubePlayer";
+import YouTubeComments from "../components/YouTubeComments";
 import {
   filterAvailableVideos,
   markVideoUnavailable,
   getUnavailableVideoIds,
   pickReplacementVideo,
+  isUnavailable,
 } from "@/lib/unavailable-videos";
+import {
+  filterUnplayedVideos,
+  isPlayedVideo,
+  addPlayedVideoId,
+  getPlayedVideoIds,
+  clearPlayedVideoHistory,
+} from "@/lib/playback-history";
 
 
 // Curated search tags for quick browsing
@@ -38,6 +47,23 @@ export default function YouTubePage() {
   const [selectedVideo, setSelectedVideo] = useState<YouTubeVideoItem | null>(null);
   const [favorites, setFavorites] = useState<YouTubeVideoItem[]>([]);
 
+  // Playback history stack for Previous navigation
+  const [playbackHistory, setPlaybackHistory] = useState<YouTubeVideoItem[]>([]);
+
+  // Autoplay Next preference state (defaults to true / ON, saved in localStorage)
+  const [autoplayNext, setAutoplayNext] = useState<boolean>(true);
+
+  // Upcoming video queue (strict deduplication and exclusion of played IDs)
+  const [upcomingQueue, setUpcomingQueue] = useState<YouTubeVideoItem[]>([]);
+  const upcomingQueueRef = useRef<YouTubeVideoItem[]>([]);
+  upcomingQueueRef.current = upcomingQueue;
+
+  // Session-level tracking of active search query, pagination, and queue exhaustion
+  const paginationTokenRef = useRef<string | undefined>(undefined);
+  const currentSearchQueryRef = useRef<string>("trending movie trailers");
+  const isReplenishingQueueRef = useRef(false);
+  const [queueExhausted, setQueueExhausted] = useState(false);
+
   // Sticky video player state
   const [isSticky, setIsSticky] = useState(false);
   const playerSentinelRef = useRef<HTMLDivElement>(null);
@@ -45,6 +71,25 @@ export default function YouTubePage() {
   // Recommendations state for the active video
   const [relatedVideos, setRelatedVideos] = useState<YouTubeVideoItem[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
+
+  // Synchronized refs to avoid stale state in async callbacks and YouTube API handlers
+  const selectedVideoRef = useRef(selectedVideo);
+  selectedVideoRef.current = selectedVideo;
+
+  const videosRef = useRef(videos);
+  videosRef.current = videos;
+
+  const relatedVideosRef = useRef(relatedVideos);
+  relatedVideosRef.current = relatedVideos;
+
+  const autoplayNextRef = useRef(autoplayNext);
+  autoplayNextRef.current = autoplayNext;
+
+  const playbackHistoryRef = useRef(playbackHistory);
+  playbackHistoryRef.current = playbackHistory;
+
+  const isSwitchingVideoRef = useRef(false);
+  const playerHandleRef = useRef<YouTubePlayerRef | null>(null);
 
   // Actions and description panel state
   const [copied, setCopied] = useState(false);
@@ -57,6 +102,27 @@ export default function YouTubePage() {
   const [isKeyMissing, setIsKeyMissing] = useState(false);
 
   const [, startTransition] = useTransition();
+
+  // Load Saved Favorites and Autoplay preference from LocalStorage on mount
+  useEffect(() => {
+    try {
+      const savedAutoplay = localStorage.getItem("streamflix_autoplay_next");
+      if (savedAutoplay !== null) {
+        setAutoplayNext(JSON.parse(savedAutoplay));
+      }
+    } catch (e) {
+      console.warn("Could not load autoplay preference:", e);
+    }
+  }, []);
+
+  const handleToggleAutoplay = useCallback((checked: boolean) => {
+    setAutoplayNext(checked);
+    try {
+      localStorage.setItem("streamflix_autoplay_next", JSON.stringify(checked));
+    } catch (e) {
+      console.warn("Could not save autoplay preference:", e);
+    }
+  }, []);
 
   // Load Saved Favorites from LocalStorage on mount
   useEffect(() => {
@@ -116,12 +182,47 @@ export default function YouTubePage() {
       if (badId) {
         setVideos((prev) => prev.filter((v) => v.id !== badId));
         setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
+        setUpcomingQueue((prev) => {
+          const filtered = prev.filter((v) => v.id !== badId);
+          upcomingQueueRef.current = filtered;
+          return filtered;
+        });
       }
     };
     window.addEventListener("streamflix_unavailable_video", handleUnavailable);
     return () => {
       window.removeEventListener("streamflix_unavailable_video", handleUnavailable);
     };
+  }, []);
+
+  // Safely append new videos to upcomingQueue without duplicates, already-played, or unavailable videos
+  const enqueueVideos = useCallback((newItems: YouTubeVideoItem[]) => {
+    if (!newItems || newItems.length === 0) return;
+    setUpcomingQueue((prev) => {
+      const existingIds = new Set(prev.map((v) => v.id));
+      const currentId = selectedVideoRef.current?.id;
+      const playedIds = getPlayedVideoIds();
+
+      const toAdd: YouTubeVideoItem[] = [];
+      for (const item of newItems) {
+        if (!item || !item.id) continue;
+        if (item.id === currentId) continue;
+        if (existingIds.has(item.id)) continue;
+        if (playedIds.has(item.id)) continue;
+        if (isUnavailable(item.id)) continue;
+
+        existingIds.add(item.id);
+        toAdd.push(item);
+      }
+
+      if (toAdd.length > 0) {
+        setQueueExhausted(false);
+        const updated = [...prev, ...toAdd];
+        upcomingQueueRef.current = updated;
+        return updated;
+      }
+      return prev;
+    });
   }, []);
 
   // Primary fetch handler for browse grid with embeddable and region filtering
@@ -136,7 +237,10 @@ export default function YouTubePage() {
         setError(null);
         setIsKeyMissing(false);
 
-        const excludeList = Array.from(getUnavailableVideoIds());
+        const excludeList = [
+          ...Array.from(getUnavailableVideoIds()),
+          ...Array.from(getPlayedVideoIds()),
+        ];
         const res = await apiClient.searchYouTube(searchTerm, token, undefined, excludeList);
         const validVideos = filterAvailableVideos(res.videos || []);
 
@@ -146,6 +250,9 @@ export default function YouTubePage() {
           setVideos(validVideos);
         }
         setNextPageToken(res.nextPageToken);
+        paginationTokenRef.current = res.nextPageToken;
+        currentSearchQueryRef.current = searchTerm;
+        enqueueVideos(validVideos);
         if (res.isKeyMissing) {
           setIsKeyMissing(true);
         }
@@ -172,13 +279,16 @@ export default function YouTubePage() {
         setLoadingMore(false);
       }
     },
-    []
+    [enqueueVideos]
   );
 
   // Initial load
   useEffect(() => {
     let ignore = false;
-    const excludeList = Array.from(getUnavailableVideoIds());
+    const excludeList = [
+      ...Array.from(getUnavailableVideoIds()),
+      ...Array.from(getPlayedVideoIds()),
+    ];
     apiClient
       .searchYouTube("trending movie trailers", undefined, undefined, excludeList)
       .then((res) => {
@@ -186,6 +296,8 @@ export default function YouTubePage() {
           const valid = filterAvailableVideos(res.videos || []);
           setVideos(valid);
           setNextPageToken(res.nextPageToken);
+          paginationTokenRef.current = res.nextPageToken;
+          enqueueVideos(valid);
           if (res.isKeyMissing) {
             setIsKeyMissing(true);
           }
@@ -206,40 +318,50 @@ export default function YouTubePage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [enqueueVideos]);
 
-  // Deep linking: check ?v= query parameter on mount and verify metadata
+  // Ref to avoid prematurely clearing ?v= on initial hydration
+  const isInitialMountRef = useRef(true);
+  useEffect(() => {
+    selectedVideoRef.current = selectedVideo;
+    if (selectedVideo?.id) {
+      addPlayedVideoId(selectedVideo.id);
+      setUpcomingQueue((prev) => {
+        const filtered = prev.filter((v) => v.id !== selectedVideo.id && !isPlayedVideo(v.id));
+        upcomingQueueRef.current = filtered;
+        return filtered;
+      });
+    }
+  }, [selectedVideo]);
+
+  // Deep linking: check ?v= query parameter on mount and browser popstate only
   useEffect(() => {
     let isCurrent = true;
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const vId = params.get("v");
-      if (vId) {
-        // If video is found in already loaded videos, use it
-        const match = videos.find((v) => v.id === vId);
-        if (match) {
-          setSelectedVideo(match);
-        } else {
-          // Direct API lookup to fetch true title and verify embeddability status
-          apiClient
-            .getVideoById(vId)
-            .then((res) => {
-              if (!isCurrent) return;
-              if (res.videos && res.videos.length > 0) {
-                setSelectedVideo(res.videos[0]);
-              } else {
-                setSelectedVideo({
-                  id: vId,
-                  title: "YouTube Video",
-                  description: "",
-                  thumbnailUrl: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
-                  channelTitle: "YouTube Creator",
-                  publishedAt: new Date().toISOString(),
-                });
-              }
-            })
-            .catch(() => {
-              if (!isCurrent) return;
+
+    const checkDeepLink = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const vId = params.get("v");
+        if (!vId) {
+          isInitialMountRef.current = false;
+          return;
+        }
+
+        // Already playing this video
+        if (selectedVideoRef.current && selectedVideoRef.current.id === vId) {
+          isInitialMountRef.current = false;
+          return;
+        }
+
+        // Direct API lookup to fetch true title and verify embeddability status
+        apiClient
+          .getVideoById(vId)
+          .then((res) => {
+            if (!isCurrent) return;
+            isInitialMountRef.current = false;
+            if (res.videos && res.videos.length > 0) {
+              setSelectedVideo(res.videos[0]);
+            } else {
               setSelectedVideo({
                 id: vId,
                 title: "YouTube Video",
@@ -248,28 +370,54 @@ export default function YouTubePage() {
                 channelTitle: "YouTube Creator",
                 publishedAt: new Date().toISOString(),
               });
+            }
+          })
+          .catch(() => {
+            if (!isCurrent) return;
+            isInitialMountRef.current = false;
+            setSelectedVideo({
+              id: vId,
+              title: "YouTube Video",
+              description: "",
+              thumbnailUrl: `https://img.youtube.com/vi/${vId}/hqdefault.jpg`,
+              channelTitle: "YouTube Creator",
+              publishedAt: new Date().toISOString(),
             });
-        }
+          });
+      } catch {
+        isInitialMountRef.current = false;
       }
-    } catch {
-      // ignore
-    }
+    };
+
+    checkDeepLink();
+    window.addEventListener("popstate", checkDeepLink);
+
     return () => {
       isCurrent = false;
+      window.removeEventListener("popstate", checkDeepLink);
     };
-  }, [videos]);
-
+  }, []); // Only run on mount & browser popstate
 
   // Sync ?v= query param with active selectedVideo
   useEffect(() => {
     try {
       const currentUrl = new URL(window.location.href);
-      if (selectedVideo) {
-        currentUrl.searchParams.set("v", selectedVideo.id);
-      } else {
-        currentUrl.searchParams.delete("v");
+      const urlV = currentUrl.searchParams.get("v");
+
+      // Do not wipe ?v= during initial deep link resolution
+      if (isInitialMountRef.current && urlV && !selectedVideo) {
+        return;
       }
-      window.history.replaceState(null, "", currentUrl.toString());
+
+      if (selectedVideo) {
+        if (urlV !== selectedVideo.id) {
+          currentUrl.searchParams.set("v", selectedVideo.id);
+          window.history.replaceState(null, "", currentUrl.toString());
+        }
+      } else if (urlV) {
+        currentUrl.searchParams.delete("v");
+        window.history.replaceState(null, "", currentUrl.toString());
+      }
     } catch {
       // ignore
     }
@@ -321,15 +469,20 @@ export default function YouTubePage() {
       cleanTitleWords.slice(0, 3).join(" ") ||
       "trending movie trailers";
 
-    const excludeList = [selectedVideo.id, ...Array.from(getUnavailableVideoIds())];
+    const excludeList = [
+      selectedVideo.id,
+      ...Array.from(getUnavailableVideoIds()),
+      ...Array.from(getPlayedVideoIds()),
+    ];
 
     apiClient
       .searchYouTube(primaryQuery, undefined, 12, excludeList)
       .then((res) => {
         if (ignore) return;
         const filtered = filterAvailableVideos(res.videos || []).filter(
-          (v) => v.id !== selectedVideo.id
+          (v) => v.id !== selectedVideo.id && !isPlayedVideo(v.id)
         );
+        enqueueVideos(filtered);
         if (filtered.length === 0) {
           // Secondary fallback search
           return apiClient
@@ -337,8 +490,9 @@ export default function YouTubePage() {
             .then((res2) => {
               if (ignore) return;
               const secondFiltered = filterAvailableVideos(res2.videos || []).filter(
-                (v) => v.id !== selectedVideo.id
+                (v) => v.id !== selectedVideo.id && !isPlayedVideo(v.id)
               );
+              enqueueVideos(secondFiltered);
               setRelatedVideos(secondFiltered.slice(0, 8));
               setLoadingRelated(false);
             });
@@ -349,7 +503,10 @@ export default function YouTubePage() {
       })
       .catch(() => {
         if (ignore) return;
-        const fallback = filterAvailableVideos(videos).filter((v) => v.id !== selectedVideo.id).slice(0, 8);
+        const fallback = filterAvailableVideos(videos)
+          .filter((v) => v.id !== selectedVideo.id && !isPlayedVideo(v.id))
+          .slice(0, 8);
+        enqueueVideos(fallback);
         setRelatedVideos(fallback);
         setLoadingRelated(false);
       });
@@ -357,7 +514,7 @@ export default function YouTubePage() {
     return () => {
       ignore = true;
     };
-  }, [selectedVideo?.id, selectedVideo?.channelTitle, selectedVideo?.title, videos]);
+  }, [selectedVideo?.id, selectedVideo?.channelTitle, selectedVideo?.title, videos, enqueueVideos]);
 
   // Action: Find another video when current video is unavailable or user requests alternative
   const handleFindAnother = useCallback(async () => {
@@ -438,9 +595,308 @@ export default function YouTubePage() {
     fetchVideos(query, nextPageToken, true);
   };
 
+  // Dynamic queue replenishment when upcomingQueue drops below 3 videos
+  const replenishQueue = useCallback(async () => {
+    if (isReplenishingQueueRef.current) return;
+    isReplenishingQueueRef.current = true;
+
+    const current = selectedVideoRef.current;
+    const currentQueue = upcomingQueueRef.current;
+    const playedIds = getPlayedVideoIds();
+    const queueIds = new Set(currentQueue.map((v) => v.id));
+
+    console.log(
+      `[StreamFlix Queue] Replenishing queue. Reason: queue length < 3 (${currentQueue.length} items remaining)...`
+    );
+
+    const excludeList = [
+      ...(current?.id ? [current.id] : []),
+      ...Array.from(getUnavailableVideoIds()),
+      ...Array.from(playedIds),
+      ...Array.from(queueIds),
+    ];
+
+    try {
+      // 1. YouTube Data API Pagination with nextPageToken
+      if (paginationTokenRef.current) {
+        const token = paginationTokenRef.current;
+        const res = await apiClient.searchYouTube(
+          currentSearchQueryRef.current,
+          token,
+          15,
+          excludeList
+        );
+        paginationTokenRef.current = res.nextPageToken;
+        const valid = filterAvailableVideos(res.videos || []).filter(
+          (v) => !playedIds.has(v.id) && !queueIds.has(v.id) && v.id !== current?.id
+        );
+
+        if (valid.length > 0) {
+          enqueueVideos(valid);
+          console.log(
+            `[StreamFlix Queue] Added ${valid.length} fresh videos via pagination token "${token}". Queue length now: ${
+              upcomingQueueRef.current.length
+            }`
+          );
+          isReplenishingQueueRef.current = false;
+          return;
+        }
+      }
+
+      // 2. Video Context Search (channel or keywords from title)
+      if (current) {
+        const cleanTitleWords = current.title
+          .replace(/[\(\)\[\]\|:,-]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length > 3 && !/^(official|trailer|teaser|video|hd|4k|movie)$/i.test(w));
+
+        const contextQuery =
+          current.channelTitle ||
+          cleanTitleWords.slice(0, 3).join(" ") ||
+          "trending movie trailers";
+
+        const res = await apiClient.searchYouTube(contextQuery, undefined, 15, excludeList);
+        const valid = filterAvailableVideos(res.videos || []).filter(
+          (v) => !playedIds.has(v.id) && !queueIds.has(v.id) && v.id !== current?.id
+        );
+
+        if (valid.length > 0) {
+          enqueueVideos(valid);
+          console.log(
+            `[StreamFlix Queue] Added ${valid.length} fresh videos via context query "${contextQuery}". Queue length now: ${
+              upcomingQueueRef.current.length
+            }`
+          );
+          isReplenishingQueueRef.current = false;
+          return;
+        }
+      }
+
+      // 3. Alternative Popular Categories Rotation
+      for (const topic of POPULAR_TOPICS) {
+        if (topic.toLowerCase() === currentSearchQueryRef.current.toLowerCase()) continue;
+        const res = await apiClient.searchYouTube(topic, undefined, 15, excludeList);
+        const valid = filterAvailableVideos(res.videos || []).filter(
+          (v) => !playedIds.has(v.id) && !queueIds.has(v.id) && v.id !== current?.id
+        );
+
+        if (valid.length > 0) {
+          enqueueVideos(valid);
+          console.log(
+            `[StreamFlix Queue] Added ${valid.length} fresh videos via category "${topic}". Queue length now: ${
+              upcomingQueueRef.current.length
+            }`
+          );
+          isReplenishingQueueRef.current = false;
+          return;
+        }
+      }
+
+      // 4. Genuine exhaustion: all categories, tokens, and searches have been exhausted
+      console.log(
+        "[StreamFlix Queue] All queues, pagination tokens, and categories exhausted. No more new videos available."
+      );
+      setQueueExhausted(true);
+    } catch (err) {
+      console.warn("[StreamFlix Queue] Replenishment encountered error:", err);
+    } finally {
+      isReplenishingQueueRef.current = false;
+    }
+  }, [enqueueVideos]);
+
+  // Proactive watermark check: trigger replenishment whenever upcomingQueue drops below 3 videos
+  useEffect(() => {
+    if (upcomingQueue.length < 3 && !queueExhausted) {
+      replenishQueue();
+    }
+  }, [upcomingQueue.length, queueExhausted, replenishQueue]);
+
+  // Determine if a previous video exists in playback history
+  const hasPrevious = React.useMemo(() => {
+    const current = selectedVideo;
+    if (!current) return false;
+    return playbackHistory.some((v) => v.id !== current.id && !isUnavailable(v.id));
+  }, [selectedVideo, playbackHistory]);
+
+  // Navigate to previous video using playback history only
+  const handlePreviousVideo = useCallback(() => {
+    const current = selectedVideoRef.current;
+    if (!current) return;
+
+    console.log(`[StreamFlix Player] Previous video requested. Current: ${current.id}`);
+
+    const history = playbackHistoryRef.current;
+    if (history.length > 0) {
+      const nextHistory = [...history];
+      let prevCandidate: YouTubeVideoItem | undefined;
+
+      while (nextHistory.length > 0) {
+        const popped = nextHistory.pop()!;
+        if (popped.id !== current.id && !isUnavailable(popped.id)) {
+          prevCandidate = popped;
+          break;
+        }
+      }
+
+      if (prevCandidate) {
+        console.log(`[StreamFlix Player] Returning to previous history video: ${prevCandidate.id}`);
+        setPlaybackHistory(nextHistory);
+        setSelectedVideo(prevCandidate);
+        try {
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set("v", prevCandidate.id);
+          window.history.replaceState(null, "", currentUrl.toString());
+        } catch {}
+      }
+    }
+  }, []);
+
+  // Determine if next video is available in upcomingQueue or can be replenished
+  const hasNext = React.useMemo(() => {
+    if (upcomingQueue.length > 0) return true;
+    if (!queueExhausted) return true;
+    return false;
+  }, [upcomingQueue.length, queueExhausted]);
+
+  // Navigate to next video (also automatically triggered when current video ENDS)
+  const handleNextVideo = useCallback(async () => {
+    const current = selectedVideoRef.current;
+    if (!current) return;
+
+    console.log(`[StreamFlix Player] Next video requested. Current: ${current.id}`);
+
+    // Debounce to prevent rapid duplicate trigger
+    if (isSwitchingVideoRef.current) {
+      console.log(`[StreamFlix Player] Already switching video, ignoring duplicate trigger.`);
+      return;
+    }
+    isSwitchingVideoRef.current = true;
+    setTimeout(() => {
+      isSwitchingVideoRef.current = false;
+    }, 1200);
+
+    // Record current video into playback history
+    setPlaybackHistory((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].id === current.id) {
+        return prev;
+      }
+      return [...prev, current];
+    });
+
+    const playedIds = getPlayedVideoIds();
+
+    // Filter queue to ensure absolute uniqueness and validity
+    let currentQueue = upcomingQueueRef.current.filter(
+      (v) => v.id !== current.id && !isUnavailable(v.id) && !playedIds.has(v.id)
+    );
+
+    let nextVideo: YouTubeVideoItem | null = null;
+
+    if (currentQueue.length > 0) {
+      nextVideo = currentQueue[0];
+      const remainingQueue = currentQueue.slice(1);
+      setUpcomingQueue(remainingQueue);
+      upcomingQueueRef.current = remainingQueue;
+    } else {
+      // Queue is empty, attempt immediate replenishment
+      console.log(`[StreamFlix Queue] Queue empty! Requesting emergency replenishment...`);
+      await replenishQueue();
+      currentQueue = upcomingQueueRef.current.filter(
+        (v) => v.id !== current.id && !isUnavailable(v.id) && !playedIds.has(v.id)
+      );
+      if (currentQueue.length > 0) {
+        nextVideo = currentQueue[0];
+        const remainingQueue = currentQueue.slice(1);
+        setUpcomingQueue(remainingQueue);
+        upcomingQueueRef.current = remainingQueue;
+      }
+    }
+
+    if (nextVideo) {
+      addPlayedVideoId(nextVideo.id);
+      setSelectedVideo(nextVideo);
+
+      const queueDisplay = upcomingQueueRef.current.slice(0, 5).map((v) => v.id).join(", ");
+      const playedDisplay = Array.from(getPlayedVideoIds()).slice(-5).join(", ");
+
+      console.log(
+        `[StreamFlix Queue] Current: ${current.id}, Queue (${upcomingQueueRef.current.length}): [${queueDisplay}${
+          upcomingQueueRef.current.length > 5 ? "..." : ""
+        }], Played (${getPlayedVideoIds().size}): [${playedDisplay}], PageToken: ${
+          paginationTokenRef.current || "none"
+        }, Selected Next: ${nextVideo.id} ("${nextVideo.title}")`
+      );
+
+      try {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set("v", nextVideo.id);
+        window.history.replaceState(null, "", currentUrl.toString());
+      } catch {}
+
+      if (upcomingQueueRef.current.length < 3) {
+        replenishQueue();
+      }
+    } else {
+      console.log(
+        `[StreamFlix Queue] Current: ${current.id}, Queue (0): [], Played (${getPlayedVideoIds().size}), No more new videos available.`
+      );
+      setQueueExhausted(true);
+    }
+  }, [replenishQueue]);
+
+  // Handle Video ENDED event specifically from YouTube IFrame Player API
+  const handleVideoEnded = useCallback(() => {
+    const current = selectedVideoRef.current;
+    const isAutoplay = autoplayNextRef.current;
+
+    console.log(`[StreamFlix Player] Video ENDED event received for: ${current?.id || "unknown"}`);
+    console.log(`[StreamFlix Player] Autoplay preference: ${isAutoplay ? "ON" : "OFF"}`);
+
+    if (isSwitchingVideoRef.current) {
+      console.log(`[StreamFlix Player] Already switching video, ignoring duplicate trigger.`);
+      return;
+    }
+
+    if (!isAutoplay) {
+      console.log(`[StreamFlix Player] Autoplay is OFF. Remaining on completed video with Replay option.`);
+      return;
+    }
+
+    // If Autoplay is ON, automatically advance to next available video
+    handleNextVideo();
+  }, [handleNextVideo]);
+
+  // Reset playback history and refill upcoming queue
+  const handleResetQueue = useCallback(() => {
+    console.log("[StreamFlix Queue] User requested queue reset. Clearing session played history...");
+    clearPlayedVideoHistory();
+    setQueueExhausted(false);
+    enqueueVideos([...videosRef.current, ...relatedVideosRef.current]);
+    replenishQueue();
+  }, [enqueueVideos, replenishQueue]);
+
   // Select video for playback
   const handleSelectVideo = (video: YouTubeVideoItem) => {
+    if (selectedVideo && selectedVideo.id !== video.id) {
+      setPlaybackHistory((prev) => {
+        if (prev.length > 0 && prev[prev.length - 1].id === selectedVideo.id) {
+          return prev;
+        }
+        return [...prev, selectedVideo];
+      });
+    }
+    addPlayedVideoId(video.id);
+    setUpcomingQueue((prev) => {
+      const filtered = prev.filter((v) => v.id !== video.id && !isPlayedVideo(v.id));
+      upcomingQueueRef.current = filtered;
+      return filtered;
+    });
     setSelectedVideo(video);
+    try {
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set("v", video.id);
+      window.history.replaceState(null, "", currentUrl.toString());
+    } catch {}
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -585,6 +1041,13 @@ export default function YouTubePage() {
                       setVideos((prev) => prev.filter((v) => v.id !== badId));
                       setRelatedVideos((prev) => prev.filter((v) => v.id !== badId));
                     }}
+                    hasPrevious={hasPrevious}
+                    hasNext={hasNext}
+                    onPrevious={handlePreviousVideo}
+                    onNext={handleNextVideo}
+                    onEnded={handleVideoEnded}
+                    autoplayNext={autoplayNext}
+                    playerRef={playerHandleRef}
                   />
                 </div>
 
@@ -676,27 +1139,82 @@ export default function YouTubePage() {
             {/* 2. VIDEO INFORMATION & ACTION BUTTONS (In normal page flow) */}
             <div className="max-w-5xl mx-auto space-y-6 pt-1">
               <div className="space-y-3">
-                {/* Badges & Tags Row */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-600/20 border border-red-500/35 text-red-400 text-[11px] font-black uppercase tracking-wider shadow-sm">
-                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                    </svg>
-                    <span>YouTube Official</span>
-                  </span>
-
-                  <span className="px-2 py-0.5 rounded border border-zinc-700/80 bg-zinc-800/60 text-[10px] font-bold text-zinc-300">
-                    HD 1080p
-                  </span>
-
-                  {selectedTags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2 py-0.5 rounded border border-teal-500/35 bg-teal-500/10 text-[10px] font-semibold text-teal-300"
-                    >
-                      {tag}
+                {/* Badges & Tags Row with Autoplay Next toggle */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-600/20 border border-red-500/35 text-red-400 text-[11px] font-black uppercase tracking-wider shadow-sm">
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                      </svg>
+                      <span>YouTube Official</span>
                     </span>
-                  ))}
+
+                    <span className="px-2 py-0.5 rounded border border-zinc-700/80 bg-zinc-800/60 text-[10px] font-bold text-zinc-300">
+                      HD 1080p
+                    </span>
+
+                    {selectedTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 rounded border border-teal-500/35 bg-teal-500/10 text-[10px] font-semibold text-teal-300"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Autoplay Next Toggle Switch */}
+                  <label
+                    className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-[#101720] hover:bg-[#15202c] border border-[#1b2b3a] hover:border-teal-500/40 cursor-pointer transition-all duration-200 select-none shadow-sm group"
+                    title={
+                      autoplayNext
+                        ? "Autoplay Next is ON: automatically plays the next video when this one ends"
+                        : "Autoplay Next is OFF: remains on current video with replay option"
+                    }
+                  >
+                    <span className="text-[11px] sm:text-xs font-bold text-zinc-300 group-hover:text-white flex items-center gap-1.5">
+                      <svg
+                        className={`w-3.5 h-3.5 transition-colors ${
+                          autoplayNext ? "text-teal-400" : "text-zinc-500"
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2.2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <span>Autoplay Next</span>
+                    </span>
+
+                    {/* Styled Pill Toggle Switch */}
+                    <div className="relative inline-flex items-center">
+                      <input
+                        id="autoplay-next-toggle"
+                        type="checkbox"
+                        checked={autoplayNext}
+                        onChange={(e) => handleToggleAutoplay(e.target.checked)}
+                        className="sr-only peer"
+                        aria-label="Toggle Autoplay Next Video"
+                      />
+                      <div className="w-8 h-4 sm:w-9 sm:h-5 bg-zinc-700 peer-checked:bg-teal-500 rounded-full transition-colors duration-200 ease-in-out">
+                        <div
+                          className={`w-3 h-3 sm:w-4 sm:h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out mt-0.5 ml-0.5 ${
+                            autoplayNext ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </label>
                 </div>
 
                 {/* Dominant Video Title */}
@@ -908,7 +1426,14 @@ export default function YouTubePage() {
                 </div>
               </div>
 
-              {/* 5. RELATED RECOMMENDATIONS SECTION */}
+              {/* 5. YOUTUBE COMMENTS & REPLIES SECTION */}
+              <YouTubeComments
+                videoId={selectedVideo.id}
+                videoTitle={selectedVideo.title}
+                channelTitle={selectedVideo.channelTitle}
+              />
+
+              {/* 6. UPCOMING QUEUE & RECOMMENDATIONS SECTION */}
               <section
                 className="mt-8 pt-7 border-t-2 border-[#182635] space-y-5"
                 aria-labelledby="related-heading"
@@ -921,23 +1446,66 @@ export default function YouTubePage() {
                         id="related-heading"
                         className="text-lg sm:text-2xl font-black text-white tracking-tight uppercase"
                       >
-                        More Like This
+                        Up Next in Queue
                       </h2>
                     </div>
                     <p className="text-xs sm:text-sm text-zinc-400 mt-1 pl-4">
-                      Explore trailers, highlights, and related videos tailored to your taste
+                      Fresh upcoming videos automatically queued for seamless playback
                     </p>
                   </div>
 
-                  {!loadingRelated && relatedVideos.length > 0 && (
+                  {upcomingQueue.length > 0 && (
                     <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 border border-teal-500/25 px-2.5 py-1 rounded-full self-start sm:self-auto">
-                      {relatedVideos.length} recommendations
+                      {upcomingQueue.length} in queue
                     </span>
                   )}
                 </div>
 
+                {/* Queue Exhausted Banner */}
+                {queueExhausted && upcomingQueue.length === 0 && (
+                  <div className="p-6 rounded-2xl bg-gradient-to-b from-[#141d27] to-[#0c1219] border border-[#233547] shadow-xl text-center space-y-4 my-4">
+                    <div className="w-12 h-12 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center mx-auto shadow-inner">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                        No More New Videos Available
+                      </h3>
+                      <p className="text-xs sm:text-sm text-zinc-400 mt-1.5 max-w-lg mx-auto leading-relaxed">
+                        You&apos;ve watched all unplayed videos in this queue session. You can reset your playback history to re-enjoy the videos or explore other categories.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      <button
+                        onClick={handleResetQueue}
+                        className="px-5 py-2.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-black text-xs sm:text-sm font-bold transition-all shadow-md shadow-teal-500/20 active:scale-95 flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Reset Play History</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedVideo(null);
+                          try {
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete("v");
+                            window.history.replaceState(null, "", url.toString());
+                          } catch {}
+                        }}
+                        className="px-5 py-2.5 rounded-lg bg-[#192738] hover:bg-[#22364c] text-zinc-200 text-xs sm:text-sm font-semibold transition-all border border-[#2d4257] active:scale-95"
+                      >
+                        Browse All Categories
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Loading Skeletons */}
-                {loadingRelated && (
+                {loadingRelated && upcomingQueue.length === 0 && !queueExhausted && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4.5">
                     {Array.from({ length: 4 }).map((_, i) => (
                       <div
@@ -954,10 +1522,10 @@ export default function YouTubePage() {
                   </div>
                 )}
 
-                {/* Related Videos Cards Grid */}
-                {!loadingRelated && relatedVideos.length > 0 && (
+                {/* Queue Cards Grid */}
+                {upcomingQueue.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-4.5">
-                    {relatedVideos.map((item) => (
+                    {upcomingQueue.map((item, index) => (
                       <div
                         key={item.id}
                         onClick={() => handleSelectVideo(item)}
@@ -992,10 +1560,10 @@ export default function YouTubePage() {
                             </div>
                           </div>
 
-                          {/* Badges */}
-                          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-sm text-[9px] font-black text-red-500 uppercase tracking-wider flex items-center gap-1 border border-zinc-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
-                            <span>YouTube</span>
+                          {/* Queue Position Badge */}
+                          <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-black text-teal-400 uppercase tracking-wider flex items-center gap-1 border border-teal-500/40 shadow-sm">
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                            <span>{index === 0 ? "Up Next" : `#${index + 1} In Queue`}</span>
                           </div>
                           <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-sm text-[9px] font-bold text-zinc-300 border border-zinc-700/60">
                             1080p

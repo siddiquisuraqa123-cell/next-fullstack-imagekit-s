@@ -1,5 +1,11 @@
 import { IVideo } from "@/model/video";
-import { YouTubeSearchApiResponse } from "@/types/youtube";
+import {
+  YouTubeSearchApiResponse,
+  YouTubeCommentsApiResponse,
+  YouTubeRepliesApiResponse,
+  YouTubeCommentThreadItem,
+  YouTubeCommentItem,
+} from "@/types/youtube";
 
 export type VideoFormData = Omit<IVideo, "_id">;
 
@@ -26,7 +32,13 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(await response.text());
+      let errBody: string;
+      try {
+        errBody = await response.text();
+      } catch {
+        errBody = response.statusText;
+      }
+      throw new Error(errBody);
     }
 
     return (await response.json()) as T;
@@ -66,7 +78,51 @@ class ApiClient {
     const params = new URLSearchParams({ id });
     return this.fetch<YouTubeSearchApiResponse>(`/youtube?${params.toString()}`);
   }
-}
 
+  // ==========================================
+  // YOUTUBE COMMENTS & REPLIES
+  // ==========================================
+
+  async getYouTubeComments(
+    videoId: string,
+    order: "relevance" | "time" = "relevance",
+    pageToken?: string,
+    maxResults?: number
+  ) {
+    const params = new URLSearchParams({ videoId, order });
+    if (pageToken) params.set("pageToken", pageToken);
+    if (maxResults) params.set("maxResults", String(maxResults));
+    return this.fetch<YouTubeCommentsApiResponse>(
+      `/youtube/comments?${params.toString()}`
+    );
+  }
+
+  async getYouTubeCommentReplies(
+    parentId: string,
+    pageToken?: string,
+    maxResults?: number
+  ) {
+    const params = new URLSearchParams({ parentId });
+    if (pageToken) params.set("pageToken", pageToken);
+    if (maxResults) params.set("maxResults", String(maxResults));
+    return this.fetch<YouTubeRepliesApiResponse>(
+      `/youtube/comments/replies?${params.toString()}`
+    );
+  }
+
+  async postYouTubeComment(videoId: string, text: string) {
+    return this.fetch<YouTubeCommentThreadItem>("/youtube/comments", {
+      method: "POST",
+      body: { videoId, text },
+    });
+  }
+
+  async replyToYouTubeComment(parentId: string, text: string) {
+    return this.fetch<YouTubeCommentItem>("/youtube/comments/reply", {
+      method: "POST",
+      body: { parentId, text },
+    });
+  }
+}
 
 export const apiClient = new ApiClient();
